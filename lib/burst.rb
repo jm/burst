@@ -1,6 +1,9 @@
 $:.unshift(File.dirname(__FILE__))
 
 require 'burst/parser'
+require 'burst/document'
+require 'burst/inline_renderer'
+
 require 'burst/blocks/basic'
 require 'burst/blocks/header'
 require 'burst/blocks/transition'

@@ -6,7 +6,7 @@ module Burst
         @content.split("\n").each {|l| puts "\t| #{l}"}
       end
 
-      def to_html
+      def to_html(r)
         "<pre>\n#{@content}\n</pre>"
       end
     end

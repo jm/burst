@@ -24,14 +24,24 @@ module Burst
 
     ENUMERATED_LIST_REGEX = /^(\w+\.|\(?\w+\)) (.+)/
 
+    def render(content)
+      document = parse(content)
+
+      html = document.blocks.map {|e| e.to_html(@inline_renderer)}.join("\n")
+      postprocess(html)
+    end
+
     def parse(content)
+      @inline_renderer = InlineRenderer.new
       @lines = content.split("\n")
-      @document = []
+      @document = Document.new(@inline_renderer)
 
       while (line = @lines.shift)
         @current_line = line
         process_current_line
       end
+
+      @document
     end
 
     def process_current_line
@@ -42,32 +52,26 @@ module Burst
       # == section header
       elsif (current_line =~ SECTION_HEADER_REGEX) && !next_line.empty? && (second_next_line =~ SECTION_HEADER_REGEX) && line_at(2).empty?
         # TODO: Handle header levels
-        puts "HEY! HEADER!"
         handle_header(next_line)
         remove_next_line
       # Line of punctuation characters followed by a blank line
       # == transition
       elsif (current_line =~ SECTION_HEADER_REGEX) && next_line.empty?
-        puts "HEY TRANSITION!"
         handle_transition
       # Non-blank current line followed by punctuation character line
       # == section header
       elsif !current_line.empty? && (next_line =~ SECTION_HEADER_REGEX)
-        puts "HEY HEADER WITH UNDER ONLY!"
         handle_header(current_line)
       # Starts with - or whatever and followed by blank line or second paragraph
       elsif current_line =~ BULLET_LIST_REGEX
-        puts "HEY LIST!"
         handle_list(:bullet)
       # Starts with something like (a) or 1. or 3)
       elsif current_line =~ ENUMERATED_LIST_REGEX
-        puts "HEY ENUMERATED LIST!"
         handle_list(:enumerated)
       elsif current_line =~ QUOTE_LITERAL_BLOCK_REGEX
         handle_block_quote
       # Explicit markup.  Could be a footnote or something else.
       elsif current_line =~ EXPLICIT_REGEX
-        puts "EXPLICIT!!"
         handle_explicit
       # Has the :: literal starter
       elsif (current_line =~ LITERAL_BLOCK_START_REGEX) && next_line.empty?
@@ -85,42 +89,40 @@ module Burst
       elsif (current_line =~ QUOTED_LITERAL_REGEX) && (last_document_element.is_a?(Blocks::Paragraph) && last_document_element.literal_marker)
         handle_quoted_literal
       else
-        puts "probably paragraph yo"
         handle_paragraph
       end
     end
 
     def handle_quoted_literal
-      puts "whoa quoted literalllll"
       @current_line += "\n"
       # TODO: Finish this      
     end
 
     def handle_literal
-      puts "literalness"
       @current_line += "\n"
       slurp_remaining_literal_block
 
-      @document << Blocks::Literal.new(current_line)
+      @document.blocks << Blocks::Literal.new(current_line)
     end
 
     def handle_paragraph
       slurp_remaining_block
-      @document << Blocks::Paragraph.new(current_line)
+      @document.blocks << Blocks::Paragraph.new(current_line)
       remove_next_line
     end
 
+    # TODO: Implement these
     def handle_explicit
-      @document << Blocks::Explicit.new("thing", current_line)
+      @document.blocks << Blocks::Explicit.new("thing", current_line)
     end
 
     def handle_header(text)
-      @document << Blocks::Header.new(text)
+      @document.blocks << Blocks::Header.new(text)
       remove_next_line
     end
 
     def handle_transition
-      @document << Blocks::Transition.new
+      @document.blocks << Blocks::Transition.new
       remove_next_line
     end
 
@@ -139,7 +141,7 @@ module Burst
         remove_next_line
       end
 
-      @document << Blocks::BlockQuote.new(current_line, attribution)
+      @document.blocks << Blocks::BlockQuote.new(current_line, attribution)
     end
 
     def handle_list(list_type)
@@ -162,7 +164,7 @@ module Burst
         remove_next_line
       end
 
-      @document << Blocks::List.new(list_type, elements)
+      @document.blocks << Blocks::List.new(list_type, elements)
     end
 
     def indented?(text)
@@ -196,8 +198,10 @@ module Burst
     end
 
     def slurp_remaining_block
+      @current_line += " " 
+
       until next_line.nil? || next_line.empty?
-        @current_line << @lines.shift
+        @current_line << @lines.shift + " "
       end
     end
 
@@ -210,7 +214,11 @@ module Burst
     end
 
     def last_document_element
-      @document.last
+      @document.blocks.last
+    end
+
+    def postprocess(content)
+      content
     end
   end
 end

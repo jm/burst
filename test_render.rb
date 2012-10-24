@@ -1,6 +1,6 @@
 require './lib/burst/inline_renderer'
 
-r = Burst::InlineRenderer.new(File.read("./test_render.rst"))
-r.render!
+r = Burst::InlineRenderer.new
+z = r.render(File.read("./test_render.rst"))
 
-puts r.content
+puts z

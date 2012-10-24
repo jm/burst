@@ -2,14 +2,13 @@ module Burst
   module Blocks
     class Header < Basic
       attr_accessor :text
-      
+
       def initialize(text)
         @text = text
-        puts "\t#{text}"
       end
 
-      def to_html
-        "<h1>#{text}</h1>"
+      def to_html(renderer)
+        "<h1>#{renderer.render(text)}</h1>"
       end
     end
   end

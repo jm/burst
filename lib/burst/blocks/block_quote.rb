@@ -6,10 +6,9 @@ module Burst
       def initialize(content, quote_attribution = nil)
         @text = content
         @attribution = quote_attribution
-        puts "'#{content}' -- #{attribution}"
       end
 
-      def to_html
+      def to_html(renderer)
         "<p>'#{text}' &mdash; #{attribution}"
       end
     end

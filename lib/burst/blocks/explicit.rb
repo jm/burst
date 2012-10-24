@@ -6,7 +6,7 @@ module Burst
         @content = text
       end
 
-      def to_html
+      def to_html(r)
         ""
       end
     end

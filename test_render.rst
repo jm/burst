@@ -1,1 +1,1 @@
-This is a **test** and things ``rock`` here and *stuff* and things **are *very* awesome**.  I'd like to test this thing[#]_ and this other things[*]_ and another things[2]_.  Test a url Reference_ .
+This is a **test** and things ``rock`` here and *stuff* and things **are *very* awesome**.  I'd like to test this thing[#]_ and this other things[*]_ and another things[2]_.  Test a url Reference_ and `another reference <http://woo.org>`_.  This thing be |cray|.  This is an `anonymous hyperlink`__.  http://aol.com should be matched.

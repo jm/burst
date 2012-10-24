@@ -1,4 +1,5 @@
 require 'digest/sha1'
+require 'uri'
 
 module Burst
   class InlineRenderer
@@ -8,10 +9,6 @@ module Burst
       "asterisk", "dagger", "Dagger", "sect", "para",
       "numbersign", "spades", "hearts", "diams", "clubs"
     ]
-
-    def initialize(content)
-      @content = content
-    end
 
     def next_footnote_number
       @footnote_index ||= 0
@@ -29,17 +26,20 @@ module Burst
       @footnote_symbols = DEFAULT_FOOTNOTE_SYMBOLS
     end
 
-    def render!
+    def render(content)
+      @content = content
+
       replace_strong_emphasis 
       replace_emphasis
       replace_inline_literals
       replace_internal_targets
+      replace_anonymous_hyperlinks
       replace_hyperlink_references
       replace_interpreted_text
       replace_footnote_references
-      replace_hyperlink_references
       replace_substitution_references
-      replace_hyperlinks
+
+      @content
     end
 
     def replace_strong_emphasis
@@ -58,10 +58,18 @@ module Burst
       @content.gsub!(/\*\*(.+?)\*\*/m, '<strong>\1</strong>')
     end
 
-    # We'll post-process these to match references
     def replace_hyperlink_references
+      @content.gsub!(/`(.+) \<(.+)\>`(?:_\W)/m) do |match| 
+        "<a href='#{$2}'>#{$1}</a>"
+      end
+
+      @content.gsub!(/`(.+)`(?:_\W)/m) do |match| 
+        "<a href='[[hlr:#{Digest::SHA1.hexdigest($1)}]]'>#{$1}</a>#{$2}"
+      end
+
+      # We'll post-process these to match references
       @content.gsub!(/(\w+)(?:_\W)/m) do |match| 
-        "[[#{Digest::SHA1.hexdigest(match)}]]"
+        "<a href='[[hlr:#{Digest::SHA1.hexdigest($1)}]]'>#{$1}</a>#{$2}"
       end
     end
 
@@ -93,16 +101,17 @@ module Burst
       end
     end
 
-    def replace_hyperlink_references
-
-    end
-
     def replace_substitution_references
-
+      # We'll post-process these to match references
+      @content.gsub!(/\|(.+)\|/m) do |match| 
+        "[[subr:#{Digest::SHA1.hexdigest($1)}]]"
+      end
     end
 
-    def replace_hyperlinks
-
+    def replace_anonymous_hyperlinks
+      @content.gsub!(/`(.+)`__\W/m) do |match| 
+        "<a href='[[anon-hl]]'>#{$1}</a>"
+      end
     end
   end
 end
