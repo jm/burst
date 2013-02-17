@@ -7,7 +7,6 @@ module Burst
         @elements.map! do |element|
           parser = Burst::Parser.new
           parser.parse(element)
-          parser.document.blocks
         end
       end
 
@@ -15,7 +14,7 @@ module Burst
         html = "<ul>\n"
 
         @elements.each do |element|
-          html << "<li>\n#{element.map {|e| e.to_html(renderer) }.join("\n")}\n</li>\n"
+          html << "<li>\n#{element.render}\n</li>\n"
         end
 
         html << "</ul>"

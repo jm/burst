@@ -9,7 +9,7 @@ module Burst
       end
 
       def to_html(renderer)
-        "<p>'#{text}' &mdash; #{attribution}"
+        "<p>'#{renderer.render(text)}' &mdash; #{attribution}"
       end
     end
   end

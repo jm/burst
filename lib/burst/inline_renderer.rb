@@ -109,6 +109,10 @@ module Burst
     end
 
     def replace_anonymous_hyperlinks
+      @content.gsub!(/(\w+)(?:__\W)/m) do |match| 
+        "<a href='[[anon-hl]]'>#{$1}</a>"
+      end
+
       @content.gsub!(/`([^`]+)`__\W/m) do |match|
         "<a href='[[anon-hl]]'>#{$1}</a>"
       end

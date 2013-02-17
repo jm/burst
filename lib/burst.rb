@@ -13,6 +13,9 @@ require 'burst/blocks/literal'
 require 'burst/blocks/explicit'
 require 'burst/blocks/block_quote'
 require 'burst/blocks/doctest'
+require 'burst/blocks/directives/admonition'
+require 'burst/blocks/directives/figure'
+require 'burst/blocks/directives/image'
 
 module Burst
   VERSION = '0.0.1'

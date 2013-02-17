@@ -24,15 +24,20 @@ module Burst
 
     ENUMERATED_LIST_REGEX = /^(\w+\.|\(?\w+\)) (.+)/
 
-    def render(content)
-      document = parse(content)
+    # Explicit markup blocks
+    FOOTNOTE_REFERENCE_REGEX = /^\.\. \[(.+)\] (.*)/
 
-      html = document.blocks.map {|e| e.to_html(@inline_renderer)}.join("\n")
-      postprocess(html)
+    ANONYMOUS_HYPERLINK_REFERENCE_REGEX = /^\.\. __\: (.+)/
+    
+    HYPERLINK_REFERENCE_REGEX = /^\.\. _(.+)\: (.+)/
+    
+    DIRECTIVE_REGEX = /^\.\. (.+)\:\: (.+)/
+
+    def initialize(renderer = nil)
+      @inline_renderer = (renderer || InlineRenderer.new)
     end
 
     def parse(content)
-      @inline_renderer = InlineRenderer.new
       @lines = content.split("\n")
       @document = Document.new(@inline_renderer)
 
@@ -42,6 +47,10 @@ module Burst
       end
 
       @document
+    end
+
+    def render(content)
+      parse(content).render
     end
 
     def process_current_line
@@ -111,9 +120,28 @@ module Burst
       remove_next_line
     end
 
-    # TODO: Implement these
     def handle_explicit
-      @document.blocks << Blocks::Explicit.new("thing", current_line)
+      if @current_line =~ FOOTNOTE_REFERENCE_REGEX
+        reference = $1
+
+        @current_line = $2.to_s
+        slurp_remaining_explicit_block
+
+        @document.footnotes << [reference, @current_line]
+      elsif @current_line =~ ANONYMOUS_HYPERLINK_REFERENCE_REGEX
+        @document.anonymous_hyperlink_references << $1
+      elsif @current_line =~ HYPERLINK_REFERENCE_REGEX
+        @document.references[$1] = $2
+      elsif @current_line =~ DIRECTIVE_REGEX
+        @current_line = $2.to_s
+        slurp_remaining_explicit_block
+
+        if (block = Blocks::Explicit.new_for_params($1, @current_line))
+          @document.blocks << block
+        end
+      else
+        puts "WARNING: Explicit markup detected but malformed."
+      end
     end
 
     def handle_header(text)
@@ -130,7 +158,7 @@ module Burst
       slurp_remaining_literal_block
       # TODO: Clean this up; we basically just need to join up the lines with spaces
       # rather than \n and remove the quotes
-      @current_line = current_line.split("\n").map {|l| l.strip}.join(" ").gsub(/^"(.*)"$/, '\1')
+      @current_line = current_line.gsub(/^"(.*)"$/, '\1')
 
       # Does it have an attribution?
       # TODO: Figure out how to add actual em dashes etc. to the regex
@@ -158,7 +186,7 @@ module Burst
       remove_next_line
 
       while (next_line =~ list_match_regex)
-        @current_line = @lines.shift.gsub(list_match_regex, '\2')
+        @current_line = @lines.shift.gsub(list_match_regex, '\2') + "\n"
         slurp_remaining_list_block(list_match_regex, 2)
         elements << current_line
         remove_next_line
@@ -208,17 +236,26 @@ module Burst
     def slurp_remaining_list_block(list_regex, indent)
       indent_regex = /^\s{#{indent},}/
 
+      puts next_line
+      puts second_next_line
       until next_line.nil? || next_line =~ list_regex || (!(next_line.empty?) && !(next_line =~ indent_regex)) || (!(second_next_line.empty?) && !(second_next_line =~ indent_regex))
         @current_line << "#{@lines.shift[indent..-1]}\n"
+      end
+      puts "*" * 80
+      puts @current_line
+      puts "*" * 80
+    end
+
+    def slurp_remaining_explicit_block
+      indent_regex = /^\s{#{2},}/
+
+      until next_line.nil? || (!(next_line.empty?) && !(next_line =~ indent_regex)) || (!(second_next_line.empty?) && !(second_next_line =~ indent_regex))
+        @current_line << "#{@lines.shift[2..-1]}\n"
       end
     end
 
     def last_document_element
       @document.blocks.last
-    end
-
-    def postprocess(content)
-      content
     end
   end
 end
