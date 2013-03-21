@@ -9,7 +9,11 @@ module Burst
       end
 
       def to_html(renderer)
-        "<p>'#{renderer.render(text)}' &mdash; #{attribution}"
+        if @attribution
+          "<p>'#{renderer.render(text)}' &mdash; #{attribution}"
+        else
+          "<blockquote>#{renderer.render(text)}</blockquote>"
+        end
       end
     end
   end
