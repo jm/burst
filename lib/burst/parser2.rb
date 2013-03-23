@@ -5,6 +5,8 @@ module Burst
     attr_accessor :current_line, :document, :previous_blank
     
     SECTION_TITLE_REGEX = /^[\!\"\#\$\%\&\'\(\)\*\+\,\-\.\/\:\;\<\=\>\?\@\[\\\]\^\_\`\{\|\}\~]{1,}$/
+    
+    TRANSITION_REGEX = /^[\!\"\#\$\%\&\'\(\)\*\+\,\-\.\/\:\;\<\=\>\?\@\[\\\]\^\_\`\{\|\}\~]{4,}$/
 
     BULLET_LIST_REGEX = /^(\s*)([\*\+\-\•\‣])(\s+)(.+)$/
 
@@ -61,7 +63,7 @@ module Burst
         process_current_line
       end
       
-      puts document.inspect
+      # puts document.inspect
       
       @document
     end
@@ -70,7 +72,7 @@ module Burst
     end
     
     def stack_pop
-      puts self.indent_stack.inspect
+      # puts self.indent_stack.inspect
       
       item = self.indent_stack.pop
       parent = self.stack_head
@@ -95,6 +97,18 @@ module Burst
     def stack_head
       self.indent_stack.last
     end
+    def switch_to_stack_head
+      head = self.stack_head
+      if head.is_a? Blocks::List
+        if head.type == :bullet
+          self.parser = "bullet_list"
+        else
+          raise "Don't know how to switch to list type #{parent.type.to_s}"
+        end
+      else
+        raise "Don't know how to switch to #{parser.stack_head.class.to_s}"
+      end
+    end
     
     def empty_stack
       while self.indent_stack.length >= 2
@@ -114,10 +128,14 @@ module Burst
       event :indented_line do
         transition :bullet_list => same
         transition :block_quote => same
+        transition :literal_block => same
       end
       
-      after_transition any => :bullet_list,
-      on: :bullet_list do |parser, transition|
+      top_levels = [:document, :paragraph, :section_title, :transition]
+      
+      
+      after_transition any => :bullet_list, on: :bullet_list \
+      do |parser, transition|
         parser.current_line =~ Parser2::BULLET_LIST_REGEX
         indent  = $1
         bullet  = $2
@@ -138,30 +156,42 @@ module Burst
       end
       after_transition :bullet_list => :bullet_list, on: :indented_line \
       do |parser, transition|
-        puts parser.current_line.inspect
         parser.current_line =~ Parser2::INDENTED_REGEX
         
         indent = $1
         content = $2
         
-        puts "ti: #{indent.length.to_s}"
-        puts "pi: #{parser.indent_level.to_s}"
-        
         total_indent = indent.length
         if total_indent == parser.indent_level
-          puts 'there'
-          parser.stack_head.elements.last << Blocks::Paragraph.new(content)
+          if parser.previous_blank
+            # Add a new paragraph sub-element
+            parser.stack_head.elements.last << Blocks::Paragraph.new(content)
+          else
+            # Append text to last sub-element
+            parser.stack_head.elements.last.last.text << ("\n"+content)
+          end
         elsif total_indent > parser.indent_level
           parser.block_quote_parse
         end
       end
-      after_transition :bullet_list => [:document, :paragraph, :section_title] \
+      after_transition :bullet_list => top_levels \
       do |parser, transition|
         unless parser.current_line =~ /^\s+/
           parser.empty_stack
         end
       end
       
+      
+      # TRANSITION ------------------------------------------------------------
+      
+      event :transition do
+        transition (any - :transition) => :transition
+      end
+      after_transition (any - :transition) => :transition \
+      do |parser, transition|
+        parser.document.blocks << Blocks::Transition.new
+        parser.indent_level = 0
+      end
       
       # SECTION TITLE ---------------------------------------------------------
       
@@ -198,30 +228,30 @@ module Burst
         indent = $1
         content = $2
         
-        total_indent = indent.length
-        
-        if total_indent == parser.indent_level
-          parser.stack_head.text << content
-          parser.indent_level = total_indent
-        elsif total_indent < parser.indent_level
+        switch_to_parent = Proc.new {
           parser.stack_pop
-          parser.indent_level = total_indent
-          
-          # Call our parent's :indented_line handler instead of our own.
-          parent = parser.stack_head
-          if parent.is_a? Blocks::List
-            if parent.type == :bullet
-              parser.parser = "bullet_list"
-            else
-              raise "Don't know how to transition into list type #{parent.type.to_s}"
-            end
+          parser.switch_to_stack_head
+          parser.process_current_line
+        }
+        
+        total_indent = indent.length
+        # TODO: Make blockquotes store paragraphs instead of raw text.
+        if total_indent == parser.indent_level
+          if parser.current_line =~ QUOTE_ATTRIBUTION_REGEX
+            attribution_symbol = $1
+            attribution = $2
+            # Add the attribution
+            parser.stack_head.attribution = attribution
+            # Leave the block quote
+            switch_to_parent.call
           else
-            raise "Don't know how to transition into #{parser.stack_head.class.to_s}"
+            parser.stack_head.text << ("\n"+content)
           end
-          parser.indented_line_parse
-          
+        elsif total_indent < parser.indent_level
+          parser.indent_level = total_indent
+          switch_to_parent.call
         else
-          raise "Can't do this yet"
+          raise "Can't do this yet (inner blockquote)"
         end
       end
       
@@ -230,15 +260,60 @@ module Burst
       # PARAGRAPH -------------------------------------------------------------
       
       after_transition any => :paragraph do |parser, transition|
+        content = parser.current_line
+        if !parser.previous_blank && \
+           parser.document.blocks.last.is_a?(Blocks::Paragraph)
+        #/if
+          # Append text to last paragraph
+          parser.document.blocks.last.text << ("\n"+content)
+        else
+          parser.document.blocks << Blocks::Paragraph.new(content)
+        end
+        # If it ends with a "::" then switch to the literal block state.
+        if parser.current_line.strip.end_with? "::"
+          parser.parser = "literal_block"
+        end
         parser.indent_level = 0
       end
       
       event :paragraph do
-        transition :bullet_list => :paragraph
-        transition :section_title => :paragraph
+        transition any => :paragraph
       end
       
+      # LITERAL BLOCK ---------------------------------------------------------
       
+      event :literal_block do
+        transition any => :literal_block
+      end
+      after_transition any => :literal_block \
+      do |parser, transition|
+        content = parser.current_line
+        
+        is_previous_block = (parser.document.blocks.last.is_a? Blocks::Literal)
+        
+        content_stripped = content.strip
+        if content_stripped.nil? || content_stripped.empty?
+          if is_previous_block
+            parser.document.blocks.last.content << "\n"
+          else
+            next
+          end
+        end
+        
+        if is_previous_block
+          # Remove leading indents
+          content = content.sub(/^\s{#{parser.indent_level.to_s}}/, '')
+          parser.document.blocks.last.content << ("\n"+content)
+        else
+          parser.current_line =~ Parser2::INDENTED_REGEX
+        
+          indent = $1
+          content = $2
+          
+          parser.indent_level = indent.length
+          parser.document.blocks << Blocks::Literal.new(content)
+        end
+      end
       
       
       
@@ -254,38 +329,16 @@ module Burst
       state :document
       state :paragraph
       state :bullet_list
-      
-      
-      state :enumerated_list do
-        
-      end
-      state :definition_list do
-        
-      end
-      state :field_list do
-        
-      end
-      state :option_list do
-        
-      end
-      state :literal_block do
-        
-      end
-      state :line_block do
-        
-      end
-      state :block_quote do
-        
-      end
-      state :doctest_block do
-        
-      end
-      state :table do
-        
-      end
-      state :directive do
-        
-      end
+      state :enumerated_list
+      state :definition_list
+      state :field_list
+      state :option_list
+      state :literal_block
+      state :line_block
+      state :block_quote
+      state :doctest_block
+      state :table
+      state :directive
       
     end
     
@@ -315,9 +368,16 @@ module Burst
         wrapped = (line_ahead(1) =~ SECTION_TITLE_REGEX)
         if wrapped
           self.advance
-        # It was the previous line was the header
         else
-          @current_line = @previous_line
+          if current_line =~ TRANSITION_REGEX && \
+             (line_ahead(0).strip.empty? && @previous_blank)
+            # It was a transition (like "\n----------\n\n")
+            transition_parse
+            return
+          else
+            # It was the previous line that was the header
+            @current_line = @previous_line
+          end
         end
         section_title_parse
         if wrapped
