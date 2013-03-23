@@ -13,6 +13,7 @@ module Burst
           Burst::Blocks::Directives::Admonition.new(markup_directive, text)
         else
           puts "WARNING: I don't know what a `#{markup_directive}` directive is.  Sorry about that.  Except not really."
+          Burst::Blocks::Directive.new(markup_directive)
         end
       end
     end
