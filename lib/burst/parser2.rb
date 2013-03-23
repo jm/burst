@@ -34,7 +34,9 @@ module Burst
     
     HYPERLINK_REFERENCE_REGEX = /^\.\. _(.+)\: (.+)/
     
-    DIRECTIVE_REGEX = /^\.\. (.+)\:\: (.+)/
+    DIRECTIVE_REGEX = /^\.\. (.+)\:\:( .+)?/
+    
+    DIRECTIVE_OPTION_REGEX = /^:(.+):\s+(.+)/
     
     
     attr_accessor :bullet_list
@@ -54,7 +56,6 @@ module Burst
       super()
     end
     
-    
     def parse(content)
       @lines    = content.split("\n")
       @document = Document.new(@inline_renderer)
@@ -72,8 +73,6 @@ module Burst
     end
     
     def stack_pop
-      # puts self.indent_stack.inspect
-      
       item = self.indent_stack.pop
       parent = self.stack_head
       
@@ -87,6 +86,8 @@ module Burst
         else
           raise "Cannot pop #{item.class.to_s} onto list"
         end
+      elsif parent.is_a? Blocks::Directive
+        parent.blocks << item
       else
         raise "Don't know how to pop onto #{parent.class.to_s}"
       end
@@ -97,6 +98,9 @@ module Burst
     def stack_head
       self.indent_stack.last
     end
+    
+    # Switch the state machine into the appropriate state to parse the head
+    # of the stack (usually done after a stack_pop).
     def switch_to_stack_head
       head = self.stack_head
       if head.is_a? Blocks::List
@@ -114,25 +118,41 @@ module Burst
       while self.indent_stack.length >= 2
         self.stack_pop
       end
-      self.document.blocks << self.indent_stack.pop
+      if self.indent_stack.length == 1
+        self.document.blocks << self.indent_stack.pop
+      elsif self.indent_stack.length != 0
+        raise "Unexpected stack size #{self.indent_stack.length.to_s}"
+      end
     end
     
     state_machine :parser, :initial => :document, namespace: 'parse' do
       
-      # BULLET LIST -----------------------------------------------------------
-      
-      # Entering/inside
-      event :bullet_list do
-        transition any => :bullet_list
-      end
+      # Generic for indented line events
       event :indented_line do
         transition :bullet_list => same
         transition :block_quote => same
         transition :literal_block => same
+        transition :directive => same
       end
       
-      top_levels = [:document, :paragraph, :section_title, :transition]
+      top_levels = [
+        :document, :paragraph, :section_title, :transition, :directive
+      ]
       
+      # Empty the stack before transitioning to a top-level
+      before_transition any => top_levels \
+      do |parser, transition|
+        next if parser.current_line.strip.empty?
+        unless parser.current_line =~ /^\s+/
+          parser.empty_stack
+        end
+      end
+      
+      # BULLET LIST -----------------------------------------------------------
+      
+      event :bullet_list do
+        transition any => :bullet_list
+      end
       
       after_transition any => :bullet_list, on: :bullet_list \
       do |parser, transition|
@@ -174,12 +194,6 @@ module Burst
           parser.block_quote_parse
         end
       end
-      after_transition :bullet_list => top_levels \
-      do |parser, transition|
-        unless parser.current_line =~ /^\s+/
-          parser.empty_stack
-        end
-      end
       
       
       # TRANSITION ------------------------------------------------------------
@@ -187,6 +201,7 @@ module Burst
       event :transition do
         transition (any - :transition) => :transition
       end
+      
       after_transition (any - :transition) => :transition \
       do |parser, transition|
         parser.document.blocks << Blocks::Transition.new
@@ -195,16 +210,15 @@ module Burst
       
       # SECTION TITLE ---------------------------------------------------------
       
+      event :section_title do
+        transition any => :section_title
+      end
+      
       after_transition any => :section_title \
       do |parser, transition|
         parser.document.blocks << Blocks::Header.new(parser.current_line)
         parser.indent_level = 0
       end
-      
-      event :section_title do
-        transition any => :section_title
-      end
-      
       
       # BLOCK QUOTE -----------------------------------------------------------
       
@@ -255,8 +269,6 @@ module Burst
         end
       end
       
-      
-      
       # PARAGRAPH -------------------------------------------------------------
       
       after_transition any => :paragraph do |parser, transition|
@@ -291,10 +303,12 @@ module Burst
         
         is_previous_block = (parser.document.blocks.last.is_a? Blocks::Literal)
         
+        # If it's a blank line
         content_stripped = content.strip
-        if content_stripped.nil? || content_stripped.empty?
+        if content_stripped.empty?
+          # If currently in a literal then just throw on a newline
           if is_previous_block
-            parser.document.blocks.last.content << "\n"
+            parser.document.blocks.last.content << ("\n"+content)
           else
             next
           end
@@ -315,7 +329,79 @@ module Burst
         end
       end
       
+      # DIRECTIVE -------------------------------------------------------------
       
+      event :directive do
+        transition any => :directive
+      end
+      
+      # Entering a directive
+      after_transition any => :directive, on: :directive \
+      do |parser, transition|
+        meta = {}
+        if parser.current_line =~ FOOTNOTE_REFERENCE_REGEX
+          type = "footnote"
+          reference = $1
+          arguments = $2.strip
+          meta = {:reference => reference}
+        else
+          parser.current_line =~ DIRECTIVE_REGEX
+          type = $1
+          arguments = $2.to_s.lstrip
+          # explicit = Blocks::Explicit.new_for_params(type, arguments)
+        end
+        directive = Blocks::Directive.new(type)
+        directive.arguments = arguments
+        directive.meta = meta
+        # Directives must be top-level
+        parser.empty_stack
+        parser.stack_push directive
+        parser.indent_level = -1
+      end
+      # Inside a directive (indented lines)
+      after_transition :directive => :directive, on: :indented_line \
+      do |parser, transition|
+        # Ignore empty lines
+        if parser.current_line.strip.empty?
+          next
+        end
+        
+        parser.current_line =~ Parser2::INDENTED_REGEX
+        indent = $1
+        content = $2
+        # Set or check the indent
+        if parser.indent_level == -1
+          parser.indent_level = indent.length
+        elsif indent.length != parser.indent_level
+          raise "Invalid indent #{indent.length.to_s} (expected #{parser.indent_level.to_s})"
+        end
+        
+        directive = parser.stack_head
+        
+        # Check for options
+        if directive.blocks.empty? && content =~ Parser2::DIRECTIVE_OPTION_REGEX
+          # No content and matches option syntax
+          opt = $1
+          val = $2
+          directive.options[opt] = val
+          next
+        end
+        
+        # Parsing the body of the directive:
+        
+        # Simple paragraph parsing
+        # TODO: Make it handle literal blocks
+        if !parser.previous_blank && \
+           directive.blocks.last.is_a?(Blocks::Paragraph)
+        #/if
+          # Append text to last paragraph
+          directive.blocks.last.text << ("\n"+content)
+        else
+          directive.blocks << Blocks::Paragraph.new(content)
+        end
+        
+        # TODO: Make this handle other stuff besides paragraphs.
+      end
       
       
       
@@ -352,7 +438,6 @@ module Burst
       @previous_line = @current_line
       
       @current_line = line.rstrip
-      
     end
     
     
@@ -364,27 +449,22 @@ module Burst
       elsif current_line =~ INDENTED_REGEX
         indented_line_parse
       elsif current_line =~ SECTION_TITLE_REGEX
-        # Look ahead for wrapped section titles
-        wrapped = (line_ahead(1) =~ SECTION_TITLE_REGEX)
-        if wrapped
-          self.advance
+        # Wrapped header or transition line
+        if current_line =~ TRANSITION_REGEX && \
+           (line_ahead(0).strip.empty? && @previous_blank)
+          # It was a transition (like "\n----------\n\n")
+          transition_parse
         else
-          if current_line =~ TRANSITION_REGEX && \
-             (line_ahead(0).strip.empty? && @previous_blank)
-            # It was a transition (like "\n----------\n\n")
-            transition_parse
-            return
-          else
-            # It was the previous line that was the header
-            @current_line = @previous_line
-          end
+          # Wrapped header
+          return
         end
+      elsif line_ahead(0) =~ SECTION_TITLE_REGEX
         section_title_parse
-        if wrapped
-          self.advance # Move beyond the current line
-          self.advance # Then beyond the following wrapping line
-        end
-      elsif
+        self.advance # Advance onto the wrapping line
+        self.advance # Then beyond the wrapping line
+      elsif current_line =~ DIRECTIVE_REGEX
+        directive_parse
+      else
         paragraph_parse
       end
       
