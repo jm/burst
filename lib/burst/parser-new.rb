@@ -268,15 +268,17 @@ module Burst
       content = $3
       line_indent = $1 || indent
       line_marker = $2
+      # For continuations:
       line_blank_marker = line_marker.sub("|", " ")
       # For lines without proper indentation following the "|":
       line_simple_marker = "|"
       
       lines = [content]
-      
+      # Shortcuts
       lil = line_indent.length
       lml = line_marker.length
-      
+      # Consume lines and either grab the line if it has a marker/continuation
+      # or end consumption upon reaching a blank line.
       line = self.replace_tabs(self.peek)
       while !line.nil? && line.start_with?(line_indent)
         # Slice off the indent
@@ -292,7 +294,7 @@ module Burst
           # Continuation, so append it to the previous line
           lines.last << line.slice(lml, line.length)
         elsif line.strip == line_simple_marker
-          # Blank line
+          # Blank line with simple marker (just "|" with no trailing space)
           lines.push("")
         else
           # Line didn't start with either of the correct markers
