@@ -10,8 +10,8 @@ module Burst
         # "<pre>\n#{@content}\n</pre>"
         html = "<div class=\"line-block\">\n"
         html << @content.split("\n").map {|line|
-          # Replace leading space with significant space
-          line.sub(/^\s+/) {|i| "&nbsp;" * i.length }
+          # Render the text then replace leading space with significant space.
+          renderer.render(line).sub(/^\s+/) {|i| "&nbsp;" * i.length }
         }.join("<br />\n")
         return (html + "\n</div>\n")
         
