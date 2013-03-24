@@ -843,13 +843,16 @@ module Burst
       indent_length = indent.length
       content = []
       while line = self.peek
+        maybe = [] # Array of blank lines
+        maybe_ahead = 0 # Count of blank lines; used with *self.peek_ahead*.
+        # Indicates to the code after the loop whether or not to bail out of
+        # the bigger while loop.
+        do_break = false
         # If it hits a blank line it keeps peeking ahead for a line with the
         # right indentation level.
-        maybe = []
-        maybe_ahead = 1
-        do_break = false
         if line.strip.empty?
           # Add the first empty line to the list of maybe lines.
+          maybe_ahead += 1
           maybe << line.slice(indent_length, line.length)
           # Then start peeking ahead.
           while maybe_line = self.peek_ahead(maybe_ahead)
@@ -862,7 +865,8 @@ module Burst
               # If line not empty with correct indentation.
               break
             else
-              # Not empty with incorrect indentation.
+              # Not empty with incorrect indentation; set *do_break* to tell
+              # code after this while to bail out of the bigger while too.
               do_break = true
               break
             end
