@@ -1,5 +1,5 @@
 module Burst
-  class Parser3
+  class NewParser
     attr_accessor :current_line, :document, :previous_blank
     
     SECTION_TITLE_REGEX = /^[\!\"\#\$\%\&\'\(\)\*\+\,\-\.\/\;\<\=\>\?\@\[\\\]\^\_\`\{\|\}\~]{1,}$/

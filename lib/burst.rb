@@ -1,8 +1,7 @@
 $:.unshift(File.dirname(__FILE__))
 
 require 'burst/parser'
-require 'burst/parser2'
-require 'burst/parser3'
+require 'burst/parser-new'
 require 'burst/document'
 require 'burst/inline_renderer'
 
