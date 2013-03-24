@@ -6,7 +6,8 @@ module Burst
     
     TRANSITION_REGEX = /^[\!\"\#\$\%\&\'\(\)\*\+\,\-\.\/\;\<\=\>\?\@\[\\\]\^\_\`\{\|\}\~]{4,}$/
 
-    BULLET_LIST_REGEX = /^(\s*)([\*\+\-\•\‣])(\s+)(.+)$/
+    BULLET_LIST_REGEX     = /^(\s*)([\*\+\-\•\‣])(\s+)(.+)$/
+    ENUMERATED_LIST_REGEX = /^(\s*)(\w+\.|\(?\w+\))(\s+)(.+)$/
 
     EXPLICIT_REGEX = /^\.\.\s+(.+)$/
 
@@ -24,9 +25,7 @@ module Burst
 
     # TODO: Unescape as much as possible
     QUOTED_LITERAL_REGEX = /^[\!\"\#\$\%\&\'\(\)\*\+\,\-\.\/\:\;\<\=\>\?\@\[\\\]\^\_\`\{\|\}\~]{1,} $/
-
-    ENUMERATED_LIST_REGEX = /^(\s*)(\w+\.|\(?\w+\)) (.+)/
-
+    
     # Explicit markup blocks
     FOOTNOTE_REFERENCE_REGEX = /^\.\. \[(.+)\](.*)/
 
@@ -98,6 +97,50 @@ module Burst
       return blocks
     end
     
+    # Parses a block based on it's first line. Handlers are allowed (and
+    # encouraged) to consume additional lines off of *lines* on their own.
+    def parse_block(line, lines, indent)
+      test_line = line.slice(indent.length, line.length)
+      
+      if test_line =~ BULLET_LIST_REGEX
+        handle_bullet_list(line, lines, indent)
+      
+      elsif test_line =~ ENUMERATED_LIST_REGEX
+        handle_enumerated_list(line, lines, indent)
+      
+      # Check if wrapped section title or a transition  
+      elsif test_line =~ SECTION_TITLE_REGEX
+        if self.peek(lines).to_s.strip.empty?
+          handle_transition(line, lines, indent)
+        else
+          handle_wrapped_section_title(line, lines, indent)
+        end
+      
+      # Check if next line is a section title line
+      elsif !line.strip.empty? && self.peek(lines).to_s =~ SECTION_TITLE_REGEX
+        handle_plain_section_title(line, lines, indent)
+      
+      elsif test_line =~ LITERAL_BLOCK_START_REGEX
+        # Grab the next non-empty line
+        line = self.slurp_empty!(lines)
+        line = line.slice(indent.length, line.length)
+        handle_literal_block(line, lines, indent)
+      
+      elsif test_line =~ INDENTED_REGEX
+        handle_block_quote(line, lines, indent)
+      
+      elsif test_line =~ DOCTEST_BLOCK_REGEX
+        handle_doctest(line, lines, indent)
+      
+      elsif test_line =~ EXPLICIT_REGEX
+        handle_explicit(line, lines, indent)
+      
+      # Default to paragraph
+      else
+        handle_paragraph(line, lines, indent)
+      end
+    end
+    
     # Consumes an entire sequence of bulleted list items.
     def handle_bullet_list(line, lines, indent)
       il = indent.length
@@ -116,7 +159,9 @@ module Burst
       lines.unshift(line)
       # While we're looking at the latest raw line and the line starts with
       # the indent we're expecting (ie. something like "- "):
-      while (line = self.peek(lines)) && line.slice(il, iil) == item_indent
+      while (line = self.peek(lines)) && \
+            line.start_with?(indent) && \
+            line.slice(il, iil) == item_indent
         # Slice off the tail of the raw line.
         content = line.slice(il + iil, line.length)
         # Take off the raw line and replace it with a line that has
@@ -138,6 +183,49 @@ module Burst
       list.items = items
       return list
     end
+    
+    # Consumes an entire sequence of bulleted list items.
+    def handle_enumerated_list(line, lines, indent)
+      il = indent.length
+      # /^(\s*)(\w+\.|\(?\w+\))(\s+)(.+)$/
+      line.slice(il, line.length) =~ ENUMERATED_LIST_REGEX
+      
+      items = []
+      list = Blocks::List.new(:enumerated)
+      
+      # Put the line back onto the queue with the indent
+      lines.unshift(line)
+      # While we're looking at the latest raw line and the line starts with
+      # the indent we're expecting (ie. something like "- "):
+      while (line = self.peek(lines)) && \
+            line.start_with?(indent) && \
+            line.slice(il, line.length) =~ ENUMERATED_LIST_REGEX
+      #/while
+        item_indent = $1 + $2 + $3
+        body_indent = $1 + (" " * $2.length) + $3
+        marker = $2
+        content = $4
+        # Take off the raw line and replace it with a line that has
+        # "- " turned into "  ".
+        lines.shift
+        lines.unshift(indent + body_indent + content)
+        
+        ret = parse_body(lines, indent + body_indent)
+        # Push whatever we got into the items
+        li = Blocks::ListItem.new(list)
+        li.blocks = ret
+        li.marker = marker
+        items.push li
+        
+        # Then look for the next non-blank line.
+        self.chomp_empty!(lines)
+        break if lines.empty?
+      end
+      
+      list.items = items
+      return list
+    end
+    
     
     # Consumes one paragraph block.
     def handle_paragraph(line, lines, indent)
@@ -386,47 +474,7 @@ module Burst
       return Blocks::Explicits::Footnote.new(label, blocks)
     end
     
-    # Parses a block based on it's first line. Handlers are allowed (and
-    # encouraged) to consume additional lines off of *lines* on their own.
-    def parse_block(line, lines, indent)
-      test_line = line.slice(indent.length, line.length)
-      
-      if test_line =~ BULLET_LIST_REGEX
-        handle_bullet_list(line, lines, indent)
-      
-      # Check if wrapped section title or a transition  
-      elsif test_line =~ SECTION_TITLE_REGEX
-        if self.peek(lines).to_s.strip.empty?
-          handle_transition(line, lines, indent)
-        else
-          handle_wrapped_section_title(line, lines, indent)
-        end
-      
-      # Check if next line is a section title line
-      elsif !line.strip.empty? && self.peek(lines).to_s =~ SECTION_TITLE_REGEX
-        handle_plain_section_title(line, lines, indent)
-      
-      elsif test_line =~ LITERAL_BLOCK_START_REGEX
-        # Grab the next non-empty line
-        line = self.slurp_empty!(lines)
-        line = line.slice(indent.length, line.length)
-        handle_literal_block(line, lines, indent)
-      
-      elsif test_line =~ INDENTED_REGEX
-        handle_block_quote(line, lines, indent)
-      
-      elsif test_line =~ DOCTEST_BLOCK_REGEX
-        handle_doctest(line, lines, indent)
-      
-      elsif test_line =~ EXPLICIT_REGEX
-        handle_explicit(line, lines, indent)
-      
-      # Default to paragraph
-      else
-        handle_paragraph(line, lines, indent)
-      end
-    end
-    
+    # UTILITIES ---------------------------------------------------------------
     
     def peek(lines)
       lines[0]
@@ -512,4 +560,3 @@ module Burst
     
   end
 end
-
