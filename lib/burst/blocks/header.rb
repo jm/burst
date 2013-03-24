@@ -10,6 +10,9 @@ module Burst
       def to_html(renderer)
         "<h1>#{renderer.render(text)}</h1>"
       end
+      def inspect
+        "h(#{text})"
+      end
     end
   end
 end

@@ -9,6 +9,9 @@ module Burst
       def to_html(r)
         "<pre>\n#{@content}\n</pre>"
       end
+      def inspect
+        "c(#{@content.inspect})"
+      end
     end
   end
 end

@@ -4,6 +4,9 @@ module Burst
       def to_html(r)
         "<hr />"
       end
+      def inspect
+        "----"
+      end
     end
   end
 end
