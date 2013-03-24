@@ -1,6 +1,6 @@
 module Burst
   class NewParser
-    attr_accessor :current_line, :document, :previous_blank
+    attr_accessor :current_line, :document, :previous_blank, :inline_renderer
     
     SECTION_TITLE_REGEX = /^[\!\"\#\$\%\&\'\(\)\*\+\,\-\.\/\;\<\=\>\?\@\[\\\]\^\_\`\{\|\}\~]{1,}$/
     
@@ -37,15 +37,20 @@ module Burst
     
     DIRECTIVE_OPTION_REGEX = /^:(.+):\s+(.+)/
     
+    TABLE_REGEX = /^(\s*)(\+(?:-+\+)+)$/
+    TABLE_HEADER_REGEX = /^\+(?:=+\+)+$/
+    TABLE_ROW_REGEX    = /^\+(?:-+\+)+$/
     
     def initialize(renderer = nil)
       @inline_renderer = (renderer || InlineRenderer.new)
-      super()
     end
     
-    # Replace any leading tabs with 4 spaces
-    def replace_tabs(line)
-      line.gsub(/^\s*/) {|ws| ws.gsub("\t", "    ") }
+    # Set up a subparser that pulls in its parent's renderer and document.
+    def self.new_subparser(parent)
+      parser = self.new()
+      parser.inline_renderer = parent.inline_renderer
+      parser.document        = parent.document
+      return parser
     end
     
     def parse(content)
@@ -57,6 +62,12 @@ module Burst
       # puts @document.blocks.inspect
       
       @document
+    end
+    
+    # Returns just blocks instead of a full document.
+    def parse_thin(content)
+      @lines = content.split("\n")
+      return parse_body("")
     end
     
     def render(content)
@@ -103,7 +114,10 @@ module Burst
     def parse_block(line, indent)
       test_line = line.slice(indent.length, line.length)
       
-      if test_line =~ BULLET_LIST_REGEX
+      if test_line =~ TABLE_REGEX
+        handle_table(line, indent)
+      
+      elsif test_line =~ BULLET_LIST_REGEX
         handle_bullet_list(line, indent)
       
       elsif test_line =~ ENUMERATED_LIST_REGEX
@@ -145,7 +159,7 @@ module Burst
     # HANDLERS ----------------------------------------------------------------
     
     # All handlers are of the format handle_...(line, indent). *line* is the
-    # current line to be handled (handlers are allowed to shift more lines 
+    # current line to be handled (handlers are allowed to shift more lines
     # off of the line queue) and *indent* is a string of spaces indicating
     # the base indentation level of the current line.
     
@@ -496,7 +510,135 @@ module Burst
       return Blocks::Explicits::Footnote.new(label, blocks)
     end
     
+    def handle_table(line, indent)
+      # TABLE_REGEX = /^(\s*)(\+(?:-+\+)+)$/
+      # TABLE_HEADER_REGEX = /^\+(?:=+\+)+$/
+      # TABLE_ROW_REGEX    = /^\+(?:-+\+)+$/
+      
+      
+      line =~ TABLE_REGEX
+      table_indent = $1 || indent
+      table_def = $2
+      # "+--+--+" -> ["--", "--"]
+      columns = table_def.scan(/-+/)
+      # Lines of the table
+      lines = []
+      
+      # Pull off all valid lines from input
+      line = self.peek
+      while !line.nil? && line.start_with?(table_indent) && !line.strip.empty?
+        lines.push(line.slice(table_indent.length, line.length))
+        
+        @lines.shift
+        line = self.peek
+      end
+      
+      # Removes leading indents from rows cell body according to indent of the
+      # first line in the body.
+      def trim_cell_indent(body)
+        # TODO: Rewrite for speeeeed...
+        lines = body.split("\n")
+        if lines.empty?
+          return body
+        end
+        
+        first_line = lines[0]
+        # /^(\s+)(.+)$/
+        first_line =~ INDENTED_REGEX
+        first_indent = $1
+        if first_indent
+          return lines.map! {|line|
+            if line.start_with? first_indent
+              line.slice(first_indent.length, line.length)
+            else
+              line
+            end
+          }.join("\n")
+        else
+          body
+        end
+      end
+      
+      # Set up a sub-parser to parse table cells
+      cell_parser = self.class.new_subparser(self)
+      
+      # Convert a row into an array of Blocks::TableCells using *parser*.
+      def row_to_cells(parser, row, cells)
+        cells.map do |cell|
+          # Remove consistent indentation at the front of the cell body
+          body = trim_cell_indent(cell)
+          # Parse the body into blocks
+          blocks = parser.parse_thin(body)
+          
+          Blocks::TableCell.new(row, blocks)
+        end
+      end
+      
+      table_rows = []
+      current_row = nil
+      while !lines.empty?
+        # Ensure there's always a row to work with
+        unless current_row
+          # Make row like ["", "", ...] if it's not set.
+          current_row = []
+          columns.length.times {|n| current_row.push "" }
+        end
+        # Current table line
+        tl = lines[0]
+        if tl =~ TABLE_HEADER_REGEX
+          row = Blocks::TableHeader.new()
+          row.cells = row_to_cells(cell_parser, row, current_row)
+          table_rows << row
+          
+          current_row = nil
+        elsif tl =~ TABLE_ROW_REGEX
+          row = Blocks::TableRow.new()
+          row.cells = row_to_cells(cell_parser, row, current_row)
+          table_rows << row
+          
+          current_row = nil
+        else
+          # Regular row
+          
+          # Index within the row
+          ri = 1 # Start past the initial "|"
+          # Column index
+          ci = 0
+          columns.each do |col|
+            # col like "----"
+            r = tl.slice(ri, col.length)
+            current_row[ci] << (r + "\n")
+            
+            ri += (col.length + 1)
+            ci += 1
+          end
+        end
+        lines.shift
+      end
+      
+      table = Blocks::Table.new
+      table.rows = table_rows
+      return table
+    end
+    
     # UTILITIES ---------------------------------------------------------------
+    
+    # Replace any leading tabs with 4 spaces
+    def replace_tabs(line)
+      line.gsub(/^\s*/) {|ws| ws.gsub("\t", "    ") }
+    end
+    
+    # Basic manipulation of the line-queue:
+    
+    def shift
+      line = @lines.shift
+      return line.nil? ? nil : self.replace_tabs(line)
+    end
+    def unshift(line)
+      @lines.unshift line
+    end
+    
+    # Looking at the line-queue:
     
     def peek
       @lines[0]
@@ -504,6 +646,9 @@ module Burst
     def peek_ahead(n)
       @lines[n]
     end
+    
+    # Advanced manipulation of the line-queue:
+    
     # Eats up any empty lines it can but leave the most recent non-empty one
     # on the queue (unlike slurp_empty! which shifts it off and returns it).
     def chomp_empty!
@@ -568,7 +713,7 @@ module Burst
         end
         
         line = self.peek
-        if line.slice(0, indent_length) == indent
+        if !line.nil? && line.start_with?(indent)
           content << line.slice(indent_length, line.length)
           @lines.shift # Pull off this line
         else
