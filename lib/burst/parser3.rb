@@ -37,6 +37,7 @@ module Burst
     
     DIRECTIVE_OPTION_REGEX = /^:(.+):\s+(.+)/
     
+    
     def initialize(renderer = nil)
       @inline_renderer = (renderer || InlineRenderer.new)
       super()
@@ -157,11 +158,12 @@ module Burst
       
       # Put the line back onto the queue with the indent
       lines.unshift(line)
-      # While we're looking at the latest raw line and the line starts with
-      # the indent we're expecting (ie. something like "- "):
-      while (line = self.peek(lines)) && \
-            line.start_with?(indent) && \
-            line.slice(il, iil) == item_indent
+      
+      while (line = self.peek(lines)) && # Latest line
+            line.start_with?(indent) && # Enough indent
+            line.slice(il, iil) == item_indent # Matching current item format
+      #/while
+        
         # Slice off the tail of the raw line.
         content = line.slice(il + iil, line.length)
         # Take off the raw line and replace it with a line that has
@@ -195,18 +197,20 @@ module Burst
       
       # Put the line back onto the queue with the indent
       lines.unshift(line)
-      # While we're looking at the latest raw line and the line starts with
-      # the indent we're expecting (ie. something like "- "):
-      while (line = self.peek(lines)) && \
-            line.start_with?(indent) && \
+      # Looking at the latest raw line and making sure the line starts with
+      # the indent we're expecting.
+      while (line = self.peek(lines)) && # Latest line
+            line.start_with?(indent) && # Enough existing indent
             line.slice(il, line.length) =~ ENUMERATED_LIST_REGEX
       #/while
+        
         item_indent = $1 + $2 + $3
         body_indent = $1 + (" " * $2.length) + $3
         marker = $2
         content = $4
-        # Take off the raw line and replace it with a line that has
-        # "- " turned into "  ".
+        
+        # Take off the raw line and replace it with a line that has a plain
+        # indent instead of one with the list item stuff.
         lines.shift
         lines.unshift(indent + body_indent + content)
         
@@ -239,7 +243,7 @@ module Burst
         if line.strip.empty?
           next false
         end
-        if line.slice(0, indent_length) != indent
+        if !line.start_with? indent
           # If the indent doesn't match, then return all blocks.
           next false
         end
@@ -285,11 +289,13 @@ module Burst
     def handle_block_quote(line, lines, indent)
       # /^(\s+)(.+)$/
       line =~ INDENTED_REGEX
-      quote_indent = $1
+      quote_indent = $1 # Includes *indent*
       content = $2
       
+      # Set up the first line and slurp any following lines with sufficient
+      # indentation.
       quote = [content]
-      more = self.slurp(lines, indent + quote_indent)
+      more = self.slurp(lines, quote_indent)
       quote.push(*more) if more
       
       # Remove trailing empty lines.
@@ -308,10 +314,11 @@ module Burst
       return Blocks::BlockQuote.new(quote.join("\n"), attribution)
     end
     
+    # Parses a literal code block (nearly identical to *handle_quote_block*).
     def handle_literal_block(line, lines, indent)
       # /^(\s+)(.+)$/
       line =~ LITERAL_BLOCK_REGEX
-      literal_indent = $1
+      literal_indent = $1 # Does not include *indent*
       content = $2
       
       code = [content]
@@ -321,6 +328,8 @@ module Burst
       return Blocks::Literal.new(code.join "\n")
     end
     
+    # Parses a doctest by slurping up all non-blank lines at a specific
+    # indentation level.
     def handle_doctest(line, lines, indent)
       code = [line.slice(indent.length, line.length)]
       while (line = self.peek(lines)) && !line.strip.empty?
@@ -344,8 +353,11 @@ module Burst
       
       if test_line =~ DIRECTIVE_REGEX
         return handle_directive(test_line, lines, indent)
+      
       elsif test_line =~ FOOTNOTE_REFERENCE_REGEX
         return handle_footnote(test_line, lines, indent)
+      
+      # Hyperlinks
       elsif test_line =~ ANONYMOUS_HYPERLINK_REFERENCE_REGEX
         # /^\.\. __\: (.+)/
         # TODO: Make this support the short-syntax ("__ http://www.python.org")
@@ -374,7 +386,7 @@ module Burst
       dir.arguments = arguments
       
       first_line = self.peek(lines)
-      # If there is nothing after the directive.
+      # If there is nothing after the directive then just return it.
       if first_line.nil?
         return dir
       end
@@ -450,6 +462,8 @@ module Burst
       first_line =~ INDENTED_REGEX
       foot_indent = $1 # Includes *indent*
       
+      # If no indented or lesser-indented content follows the footnote
+      # directive then just return it.
       if foot_indent.nil? || foot_indent <= indent
         blocks = nil
         if !content.empty?
@@ -458,6 +472,7 @@ module Burst
         return Blocks::Explicits::Footnote.new(label, blocks)
       end
       
+      # There was some intented content so parse it.
       blocks = self.parse_body(lines, foot_indent)
       
       if !content.empty?
@@ -557,6 +572,5 @@ module Burst
       return content
     end
     
-    
-  end
-end
+  end#/Parser3
+end#/Burst

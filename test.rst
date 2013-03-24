@@ -34,8 +34,14 @@ reStructuredText can be used, for example, to
   My own paragraph goes here bro.  Seriously::
 
     YEAH BUDDY
+    
+    SERIOUSLY
   
   What?
+  
+    Quote
+    
+    -- Attribution
   
   What2?
 
