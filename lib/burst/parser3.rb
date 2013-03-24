@@ -88,6 +88,9 @@ module Burst
         block = parse_block(line, lines, indent)
         if block
           blocks << block
+        elsif block === false
+          # Explicitly returning false indicates to not include the block in
+          # the output (used with hyperlink references and such).
         else
           raise "No return from block parse"
         end
@@ -255,9 +258,21 @@ module Burst
         return handle_directive(test_line, lines, indent)
       elsif test_line =~ FOOTNOTE_REFERENCE_REGEX
         return handle_footnote(test_line, lines, indent)
+      elsif test_line =~ ANONYMOUS_HYPERLINK_REFERENCE_REGEX
+        # /^\.\. __\: (.+)/
+        # TODO: Make this support the short-syntax ("__ http://www.python.org")
+        target = $1
+        @document.anonymous_references << $1
+        return false
+      elsif test_line =~ HYPERLINK_REFERENCE_REGEX
+        # /^\.\. _(.+)\: (.+)/
+        name = $1
+        target = $2
+        @document.references[name] = target
+        return false
+      else
+        raise "Don't know how to handle explicit line like: #{test_line.inspect}"
       end
-      
-      return Blocks::Explicit.new()
     end
     
     def handle_directive(test_line, lines, indent)
@@ -347,7 +362,7 @@ module Burst
       first_line =~ INDENTED_REGEX
       foot_indent = $1 # Includes *indent*
       
-      if foot_indent <= indent
+      if foot_indent.nil? || foot_indent <= indent
         blocks = nil
         if !content.empty?
           blocks = [Blocks::Paragraph.new(content)]
