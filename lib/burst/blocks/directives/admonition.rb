@@ -2,16 +2,17 @@ module Burst
   module Blocks
     module Directives
       class Admonition < Burst::Blocks::Directive
-        def initialize(admonition_type, content)
-          @type = admonition_type
-          @content = content
+        def initialize(admonition_type)
+          @admonition_type = admonition_type
           super("admonition")
-        end  
-
+        end
+        
         def to_html(renderer)
-          "<div class='admonition #{@type}'>
-            #{@renderer.render(content)}
-           </div>"
+          html = "<div class=\"admonition #{@admonition_type.to_s}\">\n"
+          unless @blocks.empty?
+            html << (@blocks.map {|b| b.to_html(renderer) }.join("\n") + "\n")
+          end
+          return (html + "</div>")
         end
       end
     end

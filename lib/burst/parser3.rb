@@ -315,8 +315,21 @@ module Burst
         # If it was able to find indentation.
         if total_indent
           dir.blocks = self.parse_body(lines, total_indent)
-        end
-      end
+          # TODO: Maybe refactor this to be cleaner and less type-specific
+          #       (instead more type-ducky).
+          if dir.is_a? Blocks::Directives::Admonition
+            if !dir.arguments.strip.empty?
+              if dir.blocks.first.is_a?(Blocks::Paragraph)
+                dir.blocks.first.text.prepend(dir.arguments.strip + "\n")
+              else
+                dir.blocks.unshift Blocks::Paragraph.new(dir.arguments.strip)
+              end
+              dir.arguments = ""
+            end#/if args empty
+          end#/if admonition
+        
+        end#/if total_indent
+      end#/if line
       
       return dir
     end#/handle_directive

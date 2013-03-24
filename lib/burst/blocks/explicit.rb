@@ -10,7 +10,7 @@ module Burst
         elsif markup_directive == "figure"
           Burst::Blocks::Directives::Figure.new(text)
         elsif ADMONITIONS.include?(markup_directive)
-          Burst::Blocks::Directives::Admonition.new(markup_directive, text)
+          Burst::Blocks::Directives::Admonition.new(markup_directive)
         else
           puts "WARNING: I don't know what a `#{markup_directive}` directive is.  Sorry about that.  Except not really."
           Burst::Blocks::Directive.new(markup_directive)
