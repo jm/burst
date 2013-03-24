@@ -8,7 +8,7 @@ module Burst
 
     BULLET_LIST_REGEX = /^(\s*)([\*\+\-\•\‣])(\s+)(.+)$/
 
-    EXPLICIT_REGEX = /^(\.\.\s+)(.+)$/
+    EXPLICIT_REGEX = /^\.\.\s+(.+)$/
 
     LITERAL_BLOCK_START_REGEX = /^\:\:/
     
@@ -28,13 +28,13 @@ module Burst
     ENUMERATED_LIST_REGEX = /^(\s*)(\w+\.|\(?\w+\)) (.+)/
 
     # Explicit markup blocks
-    FOOTNOTE_REFERENCE_REGEX = /^\.\. \[(.+)\] (.*)/
+    FOOTNOTE_REFERENCE_REGEX = /^\.\. \[(.+)\](.*)/
 
     ANONYMOUS_HYPERLINK_REFERENCE_REGEX = /^\.\. __\: (.+)/
     
     HYPERLINK_REFERENCE_REGEX = /^\.\. _(.+)\: (.+)/
     
-    DIRECTIVE_REGEX = /^\.\. (.+)\:\:( .+)?/
+    DIRECTIVE_REGEX = /^\.\.\s+(.+)\:\:( .+)?/
     
     DIRECTIVE_OPTION_REGEX = /^:(.+):\s+(.+)/
     
@@ -282,6 +282,24 @@ module Burst
       return Blocks::Literal.new(code.join "\n")
     end
     
+    def handle_doctest(line, lines, indent)
+      code = [line.slice(indent.length, line.length)]
+      while (line = self.peek(lines)) && !line.strip.empty?
+        code << line.slice(indent.length, line.length)
+        lines.shift
+      end
+      # Check that the trailing line is empty and shift it or raise an error.
+      if !line.nil?
+        if line.strip.empty?
+          lines.shift
+        else
+          raise "Expected trailing empty line"
+        end
+      end
+      
+      return Blocks::Doctest.new(code.join "\n")
+    end
+    
     # Consumes all empty lines it can and returns a non-blank line.
     def slurp_empty!(lines)
       while line = self.peek(lines)
@@ -292,6 +310,116 @@ module Burst
           return line
         end
       end
+    end
+    
+    def handle_explicit(line, lines, indent)
+      test_line = line.slice(indent.length, line.length)
+      
+      if test_line =~ DIRECTIVE_REGEX
+        return handle_directive(test_line, lines, indent)
+      elsif test_line =~ FOOTNOTE_REFERENCE_REGEX
+        return handle_footnote(test_line, lines, indent)
+      end
+      
+      return Blocks::Explicit.new()
+    end
+    
+    def handle_directive(test_line, lines, indent)
+      # DIRECTIVE_REGEX = /^\.\.\s+(.+)\:\:( .+)?/
+      # DIRECTIVE_OPTION_REGEX = /^:(.+):\s+(.+)/
+      test_line =~ DIRECTIVE_REGEX
+      type = $1
+      arguments = $2
+      
+      dir = Blocks::Explicit.new_for_params(type)
+      dir.arguments = arguments
+      
+      first_line = self.peek(lines)
+      # If there is nothing after the directive.
+      if first_line.nil?
+        return dir
+      end
+      
+      # Calculates total indentation. Includes *indent*.
+      def calculate_indent(line)
+        # /^(\s+)(.+)$/
+        line =~ INDENTED_REGEX
+        return $1
+      end
+      
+      # If it's not empty then it's going to be options.
+      if !first_line.strip.empty?
+        option_indent = calculate_indent(self.peek(lines))
+        
+        line_okay = Proc.new {|l|
+          if l.start_with? option_indent
+            true
+          else
+            false
+          end
+        }
+        # Search for any options
+        while (line = self.peek(lines)) && line_okay.call(line)
+          # Chop of the leading indent
+          line = line.slice(option_indent.length, line.length)
+          if line =~ DIRECTIVE_OPTION_REGEX
+            dir.options[$1] = $2
+            lines.shift
+          else
+            break
+          end
+        end
+      end
+      
+      # Eat up blank lines, then look for body content.
+      self.chomp_empty!(lines)
+      line = self.peek(lines)
+      if line
+        total_indent = calculate_indent(line)
+        # If it was able to find indentation.
+        if total_indent
+          dir.blocks = self.parse_body(lines, total_indent)
+        end
+      end
+      
+      return dir
+    end#/handle_directive
+    
+    def handle_footnote(test_line, lines, indent)
+      # /^\.\. \[(.+)\](.*)/
+      test_line =~ FOOTNOTE_REFERENCE_REGEX
+      label = $1
+      content = $2.strip
+      
+      chomped = self.chomp_empty!(lines)
+      # Calculate footnote indentation from the first line following it
+      first_line = self.peek(lines)
+      # /^(\s+)(.+)$/
+      first_line =~ INDENTED_REGEX
+      foot_indent = $1 # Includes *indent*
+      
+      if foot_indent <= indent
+        blocks = nil
+        if !content.empty?
+          blocks = [Blocks::Paragraph.new(content)]
+        end
+        return Blocks::Explicits::Footnote.new(label, blocks)
+      end
+      
+      blocks = self.parse_body(lines, foot_indent)
+      
+      if !content.empty?
+        # If a paragraph immediately followed the footnote line then push the
+        # content onto the front of that first paragraph block.
+        if chomped == 0 && blocks.first.is_a?(Blocks::Paragraph)
+          blocks.first.text.prepend(content + "\n")
+        # Otherwise create a new paragraph and put it on the front.
+        else
+          blocks.unshift Blocks::Paragraph.new(content)
+        end
+      end
+      
+      return Blocks::Explicits::Footnote.new(label, blocks)
     end
     
     # Parses a block based on it's first line. Handlers are allowed (and
@@ -315,7 +443,6 @@ module Burst
         handle_plain_section_title(line, lines, indent)
       
       elsif test_line =~ LITERAL_BLOCK_START_REGEX
-        lines.shift # Skip over this line
         # Grab the next non-empty line
         line = self.slurp_empty!(lines)
         line = line.slice(indent.length, line.length)
@@ -323,6 +450,12 @@ module Burst
       
       elsif test_line =~ INDENTED_REGEX
         handle_block_quote(line, lines, indent)
+      
+      elsif test_line =~ DOCTEST_BLOCK_REGEX
+        handle_doctest(line, lines, indent)
+      
+      elsif test_line =~ EXPLICIT_REGEX
+        handle_explicit(line, lines, indent)
       
       # Default to paragraph
       else
@@ -340,9 +473,12 @@ module Burst
     # Eats up any empty lines it can but leave the most recent non-empty one
     # on the queue (unlike slurp_empty! which shifts it off and returns it).
     def chomp_empty!(lines)
+      chomped = 0
       while !lines.empty? && self.peek(lines).strip.empty?
+        chomped += 1
         lines.shift
       end
+      return chomped
     end
     
   end

@@ -4,7 +4,7 @@ module Burst
       # Required admonitions per the rST spec
       ADMONITIONS = %w{admonition attention danger caution error hint important note tip warning}
 
-      def self.new_for_params(markup_directive, text)
+      def self.new_for_params(markup_directive, text = "")
         if markup_directive == "image"
           Burst::Blocks::Directives::Image.new(text)
         elsif markup_directive == "figure"
@@ -16,6 +16,11 @@ module Burst
           Burst::Blocks::Directive.new(markup_directive)
         end
       end
+      
+      def to_html(renderer)
+        "explicit()"
+      end
+      
     end
   end
 end
