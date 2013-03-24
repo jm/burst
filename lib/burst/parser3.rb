@@ -217,58 +217,6 @@ module Burst
       return Blocks::BlockQuote.new(quote.join("\n"), attribution)
     end
     
-    # Consumes lines at a given indentation level without regard for
-    # sub-indentation (used for literal blocks and block quotes).
-    def slurp(lines, indent)
-      indent_length = indent.length
-      content = []
-      while line = self.peek(lines)
-        # If it hits a blank line it keeps peeking ahead for a line with the
-        # right indentation level.
-        maybe = []
-        maybe_ahead = 1
-        do_break = false
-        if line.strip.empty?
-          # Add the first empty line to the list of maybe lines.
-          maybe << line.slice(indent_length, line.length)
-          # Then start peeking ahead.
-          while maybe_line = self.peek_ahead(lines, maybe_ahead)
-            if maybe_line.strip.empty?
-              # If line empty:
-              maybe_ahead += 1
-              maybe << maybe_line.slice(indent_length, maybe_line.length)
-              next
-            elsif maybe_line.slice(0, indent_length) == indent
-              # If line not empty with correct indentation.
-              break
-            else
-              # Not empty with incorrect indentation.
-              do_break = true
-              break
-            end
-          end
-        end
-        # Indentation got broken.
-        break if do_break
-        # Some blank lines were found
-        if maybe.length > 0
-          content << (maybe.join "\n")
-          # Shift off all the lines that were found.
-          maybe.length.times { lines.shift }
-        end
-        
-        line = self.peek(lines)
-        if line.slice(0, indent_length) == indent
-          content << line.slice(indent_length, line.length)
-          lines.shift # Pull off this line
-        else
-          # Incorrect indentation
-          break
-        end
-      end
-      return content
-    end
-    
     def handle_literal_block(line, lines, indent)
       # /^(\s+)(.+)$/
       line =~ LITERAL_BLOCK_REGEX
@@ -298,18 +246,6 @@ module Burst
       end
       
       return Blocks::Doctest.new(code.join "\n")
-    end
-    
-    # Consumes all empty lines it can and returns a non-blank line.
-    def slurp_empty!(lines)
-      while line = self.peek(lines)
-        lines.shift
-        if line.strip.empty?
-          next
-        else
-          return line
-        end
-      end
     end
     
     def handle_explicit(line, lines, indent)
@@ -480,6 +416,71 @@ module Burst
       end
       return chomped
     end
+    
+    # Consumes all empty lines it can and returns a non-blank line.
+    def slurp_empty!(lines)
+      while line = self.peek(lines)
+        lines.shift
+        if line.strip.empty?
+          next
+        else
+          return line
+        end
+      end
+    end
+    
+    # Consumes lines at a given indentation level without regard for
+    # sub-indentation (used for literal blocks and block quotes).
+    def slurp(lines, indent)
+      indent_length = indent.length
+      content = []
+      while line = self.peek(lines)
+        # If it hits a blank line it keeps peeking ahead for a line with the
+        # right indentation level.
+        maybe = []
+        maybe_ahead = 1
+        do_break = false
+        if line.strip.empty?
+          # Add the first empty line to the list of maybe lines.
+          maybe << line.slice(indent_length, line.length)
+          # Then start peeking ahead.
+          while maybe_line = self.peek_ahead(lines, maybe_ahead)
+            if maybe_line.strip.empty?
+              # If line empty:
+              maybe_ahead += 1
+              maybe << maybe_line.slice(indent_length, maybe_line.length)
+              next
+            elsif maybe_line.slice(0, indent_length) == indent
+              # If line not empty with correct indentation.
+              break
+            else
+              # Not empty with incorrect indentation.
+              do_break = true
+              break
+            end
+          end
+        end
+        # Indentation got broken.
+        break if do_break
+        # Some blank lines were found
+        if maybe.length > 0
+          content << (maybe.join "\n")
+          # Shift off all the lines that were found.
+          maybe.length.times { lines.shift }
+        end
+        
+        line = self.peek(lines)
+        if line.slice(0, indent_length) == indent
+          content << line.slice(indent_length, line.length)
+          lines.shift # Pull off this line
+        else
+          # Incorrect indentation
+          break
+        end
+      end
+      return content
+    end
+    
     
   end
 end

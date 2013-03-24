@@ -7,11 +7,12 @@ module Burst
         end  
 
         def to_html(renderer)
-          "<div class='figure'>
-            <img src='#{@arguments.strip}'>
-            #{@blocks.map {|b| b.to_html(renderer) }.join("\n")}
-           </div>
-          "
+          html = "<div class=\"figure\">\n"
+          html << "<img src=\"#{@arguments.strip}\">\n"
+          unless @blocks.empty?
+            html << (@blocks.map {|b| b.to_html(renderer) }.join("\n") + "\n")
+          end
+          return (html + "</div>")
         end
       end
     end
