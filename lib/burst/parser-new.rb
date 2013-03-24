@@ -52,7 +52,7 @@ module Burst
       @lines    = content.split("\n")
       @document = Document.new(@inline_renderer)
       
-      @document.blocks = parse_body(@lines, "")
+      @document.blocks = parse_body("")
       
       # puts @document.blocks.inspect
       
@@ -67,13 +67,13 @@ module Burst
     # feeds those lines to parse_block(). Returns all blocks it has found as
     # an array when it either a) runs out of input or b) runs into a lesser-
     # indented line.
-    def parse_body(lines, indent)
+    def parse_body(indent)
       indent_length = indent.length
       
       blocks = []
       
-      while !lines.empty?
-        line = lines.shift
+      while !@lines.empty?
+        line = @lines.shift
         line = replace_tabs(line)
         # Skip empty lines
         if line.strip.empty?
@@ -81,11 +81,11 @@ module Burst
         end
         if line.slice(0, indent_length) != indent
           # If the indent doesn't match, then return all blocks.
-          lines.unshift line
+          @lines.unshift line
           return blocks
         end
         
-        block = parse_block(line, lines, indent)
+        block = parse_block(line, indent)
         if block
           blocks << block
         elsif block === false
@@ -100,50 +100,57 @@ module Burst
     
     # Parses a block based on it's first line. Handlers are allowed (and
     # encouraged) to consume additional lines off of *lines* on their own.
-    def parse_block(line, lines, indent)
+    def parse_block(line, indent)
       test_line = line.slice(indent.length, line.length)
       
       if test_line =~ BULLET_LIST_REGEX
-        handle_bullet_list(line, lines, indent)
+        handle_bullet_list(line, indent)
       
       elsif test_line =~ ENUMERATED_LIST_REGEX
-        handle_enumerated_list(line, lines, indent)
+        handle_enumerated_list(line, indent)
       
       # Check if wrapped section title or a transition  
       elsif test_line =~ SECTION_TITLE_REGEX
-        if self.peek(lines).to_s.strip.empty?
-          handle_transition(line, lines, indent)
+        if self.peek.to_s.strip.empty?
+          handle_transition(line, indent)
         else
-          handle_wrapped_section_title(line, lines, indent)
+          handle_wrapped_section_title(line, indent)
         end
       
       # Check if next line is a section title line
-      elsif !line.strip.empty? && self.peek(lines).to_s =~ SECTION_TITLE_REGEX
-        handle_plain_section_title(line, lines, indent)
+      elsif !line.strip.empty? && self.peek.to_s =~ SECTION_TITLE_REGEX
+        handle_plain_section_title(line, indent)
       
       elsif test_line =~ LITERAL_BLOCK_START_REGEX
         # Grab the next non-empty line
-        line = self.slurp_empty!(lines)
+        line = self.slurp_empty!
         line = line.slice(indent.length, line.length)
-        handle_literal_block(line, lines, indent)
+        handle_literal_block(line, indent)
       
       elsif test_line =~ INDENTED_REGEX
-        handle_block_quote(line, lines, indent)
+        handle_block_quote(line, indent)
       
       elsif test_line =~ DOCTEST_BLOCK_REGEX
-        handle_doctest(line, lines, indent)
+        handle_doctest(line, indent)
       
       elsif test_line =~ EXPLICIT_REGEX
-        handle_explicit(line, lines, indent)
+        handle_explicit(line, indent)
       
       # Default to paragraph
       else
-        handle_paragraph(line, lines, indent)
+        handle_paragraph(line, indent)
       end
     end
     
+    # HANDLERS ----------------------------------------------------------------
+    
+    # All handlers are of the format handle_...(line, indent). *line* is the
+    # current line to be handled (handlers are allowed to shift more lines 
+    # off of the line queue) and *indent* is a string of spaces indicating
+    # the base indentation level of the current line.
+    
     # Consumes an entire sequence of bulleted list items.
-    def handle_bullet_list(line, lines, indent)
+    def handle_bullet_list(line, indent)
       il = indent.length
       # /^(\s*)([\*\+\-\•\‣])(\s+)(.+)$/
       line.slice(il, line.length) =~ BULLET_LIST_REGEX
@@ -157,9 +164,9 @@ module Burst
       list = Blocks::List.new(:bullet)
       
       # Put the line back onto the queue with the indent
-      lines.unshift(line)
+      @lines.unshift(line)
       
-      while (line = self.peek(lines)) && # Latest line
+      while (line = self.peek) && # Latest line
             line.start_with?(indent) && # Enough indent
             line.slice(il, iil) == item_indent # Matching current item format
       #/while
@@ -168,18 +175,18 @@ module Burst
         content = line.slice(il + iil, line.length)
         # Take off the raw line and replace it with a line that has
         # "- " turned into "  ".
-        lines.shift
-        lines.unshift(indent + body_indent + content)
+        @lines.shift
+        @lines.unshift(indent + body_indent + content)
         
-        ret = parse_body(lines, indent + body_indent)
+        ret = parse_body(indent + body_indent)
         # Push whatever we got into the items
         li = Blocks::ListItem.new(list)
         li.blocks = ret
         items.push li
         
         # Then look for the next non-blank line.
-        self.chomp_empty!(lines)
-        break if lines.empty?
+        self.chomp_empty!
+        break if @lines.empty?
       end
       
       list.items = items
@@ -187,7 +194,7 @@ module Burst
     end
     
     # Consumes an entire sequence of bulleted list items.
-    def handle_enumerated_list(line, lines, indent)
+    def handle_enumerated_list(line, indent)
       il = indent.length
       # /^(\s*)(\w+\.|\(?\w+\))(\s+)(.+)$/
       line.slice(il, line.length) =~ ENUMERATED_LIST_REGEX
@@ -196,10 +203,10 @@ module Burst
       list = Blocks::List.new(:enumerated)
       
       # Put the line back onto the queue with the indent
-      lines.unshift(line)
+      @lines.unshift(line)
       # Looking at the latest raw line and making sure the line starts with
       # the indent we're expecting.
-      while (line = self.peek(lines)) && # Latest line
+      while (line = self.peek) && # Latest line
             line.start_with?(indent) && # Enough existing indent
             line.slice(il, line.length) =~ ENUMERATED_LIST_REGEX
       #/while
@@ -211,8 +218,8 @@ module Burst
         
         # Take off the raw line and replace it with a line that has a plain
         # indent instead of one with the list item stuff.
-        lines.shift
-        lines.unshift(indent + body_indent + content)
+        @lines.shift
+        @lines.unshift(indent + body_indent + content)
         
         ret = parse_body(lines, indent + body_indent)
         # Push whatever we got into the items
@@ -232,14 +239,14 @@ module Burst
     
     
     # Consumes one paragraph block.
-    def handle_paragraph(line, lines, indent)
+    def handle_paragraph(line, indent)
       indent_length = indent.length
       
       content = [line.slice(indent_length, line.length)]
       
       # Checks if next line is valid and shifts it off if it is.
       next_line_okay = Proc.new {
-        line = self.peek(lines)
+        line = self.peek
         if line.strip.empty?
           next false
         end
@@ -247,31 +254,31 @@ module Burst
           # If the indent doesn't match, then return all blocks.
           next false
         end
-        lines.shift
+        @lines.shift
         true
       }
       
-      while !lines.empty? && next_line_okay.call
+      while !@lines.empty? && next_line_okay.call
         content.push line.slice(indent_length, line.length)
       end
       
       if content.last.end_with? "::"
         # Push on an indicator for a literal block.
-        lines.unshift "#{indent}"
-        lines.unshift "#{indent}::"
+        @lines.unshift "#{indent}"
+        @lines.unshift "#{indent}::"
       end
       
       return Blocks::Paragraph.new(content.join "\n")
     end
     
-    def handle_transition(line, lines, indent)
+    def handle_transition(line, indent)
       return Blocks::Transition.new
     end
     
-    def handle_wrapped_section_title(line, lines, indent)
+    def handle_wrapped_section_title(line, indent)
       prefix = line
-      header = lines.shift.slice(indent.length, line.length)
-      suffix = lines.shift.slice(indent.length, line.length)
+      header = @lines.shift.slice(indent.length, line.length)
+      suffix = @lines.shift.slice(indent.length, line.length)
       
       if prefix != suffix
         # TODO: Line numbers
@@ -280,13 +287,13 @@ module Burst
       return Blocks::Header.new(header)
     end
     
-    def handle_plain_section_title(line, lines, indent)
+    def handle_plain_section_title(line, indent)
       header = line
-      suffix = lines.shift#.strip
+      suffix = @lines.shift#.strip
       return Blocks::Header.new(header)
     end
     
-    def handle_block_quote(line, lines, indent)
+    def handle_block_quote(line, indent)
       # /^(\s+)(.+)$/
       line =~ INDENTED_REGEX
       quote_indent = $1 # Includes *indent*
@@ -295,7 +302,7 @@ module Burst
       # Set up the first line and slurp any following lines with sufficient
       # indentation.
       quote = [content]
-      more = self.slurp(lines, quote_indent)
+      more = self.slurp(quote_indent)
       quote.push(*more) if more
       
       # Remove trailing empty lines.
@@ -315,14 +322,14 @@ module Burst
     end
     
     # Parses a literal code block (nearly identical to *handle_quote_block*).
-    def handle_literal_block(line, lines, indent)
+    def handle_literal_block(line, indent)
       # /^(\s+)(.+)$/
       line =~ LITERAL_BLOCK_REGEX
       literal_indent = $1 # Does not include *indent*
       content = $2
       
       code = [content]
-      more = self.slurp(lines, indent + literal_indent)
+      more = self.slurp(indent + literal_indent)
       code.push(*more) if more
       
       return Blocks::Literal.new(code.join "\n")
@@ -330,9 +337,9 @@ module Burst
     
     # Parses a doctest by slurping up all non-blank lines at a specific
     # indentation level.
-    def handle_doctest(line, lines, indent)
+    def handle_doctest(line, indent)
       code = [line.slice(indent.length, line.length)]
-      while (line = self.peek(lines)) && !line.strip.empty?
+      while (line = self.peek) && !line.strip.empty?
         code << line.slice(indent.length, line.length)
         lines.shift
       end
@@ -348,14 +355,14 @@ module Burst
       return Blocks::Doctest.new(code.join "\n")
     end
     
-    def handle_explicit(line, lines, indent)
+    def handle_explicit(line, indent)
       test_line = line.slice(indent.length, line.length)
       
       if test_line =~ DIRECTIVE_REGEX
-        return handle_directive(test_line, lines, indent)
+        return handle_directive(test_line, indent)
       
       elsif test_line =~ FOOTNOTE_REFERENCE_REGEX
-        return handle_footnote(test_line, lines, indent)
+        return handle_footnote(test_line, indent)
       
       # Hyperlinks
       elsif test_line =~ ANONYMOUS_HYPERLINK_REFERENCE_REGEX
@@ -375,7 +382,7 @@ module Burst
       end
     end
     
-    def handle_directive(test_line, lines, indent)
+    def handle_directive(test_line, indent)
       # DIRECTIVE_REGEX = /^\.\.\s+(.+)\:\:( .+)?/
       # DIRECTIVE_OPTION_REGEX = /^:(.+):\s+(.+)/
       test_line =~ DIRECTIVE_REGEX
@@ -385,7 +392,7 @@ module Burst
       dir = Blocks::Explicit.new_for_params(type)
       dir.arguments = arguments
       
-      first_line = self.peek(lines)
+      first_line = self.peek
       # If there is nothing after the directive then just return it.
       if first_line.nil?
         return dir
@@ -400,7 +407,7 @@ module Burst
       
       # If it's not empty then it's going to be options.
       if !first_line.strip.empty?
-        option_indent = calculate_indent(self.peek(lines))
+        option_indent = calculate_indent(self.peek)
         
         line_okay = Proc.new {|l|
           if l.start_with? option_indent
@@ -410,12 +417,12 @@ module Burst
           end
         }
         # Search for any options
-        while (line = self.peek(lines)) && line_okay.call(line)
+        while (line = self.peek) && line_okay.call(line)
           # Chop of the leading indent
           line = line.slice(option_indent.length, line.length)
           if line =~ DIRECTIVE_OPTION_REGEX
             dir.options[$1] = $2
-            lines.shift
+            @lines.shift
           else
             break
           end
@@ -423,13 +430,13 @@ module Burst
       end
       
       # Eat up blank lines, then look for body content.
-      self.chomp_empty!(lines)
-      line = self.peek(lines)
+      self.chomp_empty!
+      line = self.peek
       if line
         total_indent = calculate_indent(line)
         # If it was able to find indentation.
         if total_indent
-          dir.blocks = self.parse_body(lines, total_indent)
+          dir.blocks = self.parse_body(total_indent)
           # TODO: Maybe refactor this to be cleaner and less type-specific
           #       (instead more type-ducky).
           if dir.is_a? Blocks::Directives::Admonition
@@ -449,15 +456,15 @@ module Burst
       return dir
     end#/handle_directive
     
-    def handle_footnote(test_line, lines, indent)
+    def handle_footnote(test_line, indent)
       # /^\.\. \[(.+)\](.*)/
       test_line =~ FOOTNOTE_REFERENCE_REGEX
       label = $1
       content = $2.strip
       
-      chomped = self.chomp_empty!(lines)
+      chomped = self.chomp_empty!
       # Calculate footnote indentation from the first line following it
-      first_line = self.peek(lines)
+      first_line = self.peek
       # /^(\s+)(.+)$/
       first_line =~ INDENTED_REGEX
       foot_indent = $1 # Includes *indent*
@@ -473,7 +480,7 @@ module Burst
       end
       
       # There was some intented content so parse it.
-      blocks = self.parse_body(lines, foot_indent)
+      blocks = self.parse_body(foot_indent)
       
       if !content.empty?
         # If a paragraph immediately followed the footnote line then push the
@@ -491,27 +498,27 @@ module Burst
     
     # UTILITIES ---------------------------------------------------------------
     
-    def peek(lines)
-      lines[0]
+    def peek
+      @lines[0]
     end
-    def peek_ahead(lines, n)
-      lines[n]
+    def peek_ahead(n)
+      @lines[n]
     end
     # Eats up any empty lines it can but leave the most recent non-empty one
     # on the queue (unlike slurp_empty! which shifts it off and returns it).
-    def chomp_empty!(lines)
+    def chomp_empty!
       chomped = 0
-      while !lines.empty? && self.peek(lines).strip.empty?
+      while !@lines.empty? && self.peek.strip.empty?
         chomped += 1
-        lines.shift
+        @lines.shift
       end
       return chomped
     end
     
     # Consumes all empty lines it can and returns a non-blank line.
-    def slurp_empty!(lines)
-      while line = self.peek(lines)
-        lines.shift
+    def slurp_empty!
+      while line = self.peek
+        @lines.shift
         if line.strip.empty?
           next
         else
@@ -522,10 +529,10 @@ module Burst
     
     # Consumes lines at a given indentation level without regard for
     # sub-indentation (used for literal blocks and block quotes).
-    def slurp(lines, indent)
+    def slurp(indent)
       indent_length = indent.length
       content = []
-      while line = self.peek(lines)
+      while line = self.peek
         # If it hits a blank line it keeps peeking ahead for a line with the
         # right indentation level.
         maybe = []
@@ -535,7 +542,7 @@ module Burst
           # Add the first empty line to the list of maybe lines.
           maybe << line.slice(indent_length, line.length)
           # Then start peeking ahead.
-          while maybe_line = self.peek_ahead(lines, maybe_ahead)
+          while maybe_line = self.peek_ahead(maybe_ahead)
             if maybe_line.strip.empty?
               # If line empty:
               maybe_ahead += 1
@@ -557,13 +564,13 @@ module Burst
         if maybe.length > 0
           content << (maybe.join "\n")
           # Shift off all the lines that were found.
-          maybe.length.times { lines.shift }
+          maybe.length.times { @lines.shift }
         end
         
-        line = self.peek(lines)
+        line = self.peek
         if line.slice(0, indent_length) == indent
           content << line.slice(indent_length, line.length)
-          lines.shift # Pull off this line
+          @lines.shift # Pull off this line
         else
           # Incorrect indentation
           break
