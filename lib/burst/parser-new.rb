@@ -37,9 +37,11 @@ module Burst
     
     DIRECTIVE_OPTION_REGEX = /^:(.+):\s+(.+)/
     
-    TABLE_REGEX = /^(\s*)(\+(?:-+\+)+)$/
-    TABLE_HEADER_REGEX = /^\+(?:=+\+)+$/
-    TABLE_ROW_REGEX    = /^\+(?:-+\+)+$/
+    TABLE_REGEX = /^(\s*)(\+(?:-+\+)+)/
+    TABLE_HEADER_REGEX = /^\+(?:=+\+)+/
+    TABLE_ROW_REGEX    = /^\+(?:-+\+)+/
+    
+    SIMPLE_TABLE_REGEX = /^(\s*)(=+(?:\s+=+)*)/
     
     def initialize(renderer = nil)
       @inline_renderer = (renderer || InlineRenderer.new)
@@ -116,6 +118,9 @@ module Burst
       
       if test_line =~ TABLE_REGEX
         handle_table(line, indent)
+        
+      elsif test_line =~ SIMPLE_TABLE_REGEX
+        handle_simple_table(line, indent)
       
       elsif test_line =~ BULLET_LIST_REGEX
         handle_bullet_list(line, indent)
@@ -525,38 +530,13 @@ module Burst
       lines = []
       
       # Pull off all valid lines from input
-      line = self.peek
-      while !line.nil? && line.start_with?(table_indent) && !line.strip.empty?
+      while (line = self.peek) &&
+        line.start_with?(table_indent) && !line.strip.empty?
+      #/while
         lines.push(line.slice(table_indent.length, line.length))
         
         @lines.shift
-        line = self.peek
-      end
-      
-      # Removes leading indents from rows cell body according to indent of the
-      # first line in the body.
-      def trim_cell_indent(body)
-        # TODO: Rewrite for speeeeed...
-        lines = body.split("\n")
-        if lines.empty?
-          return body
-        end
         
-        first_line = lines[0]
-        # /^(\s+)(.+)$/
-        first_line =~ INDENTED_REGEX
-        first_indent = $1
-        if first_indent
-          return lines.map! {|line|
-            if line.start_with? first_indent
-              line.slice(first_indent.length, line.length)
-            else
-              line
-            end
-          }.join("\n")
-        else
-          body
-        end
       end
       
       # Set up a sub-parser to parse table cells
@@ -566,7 +546,7 @@ module Burst
       def row_to_cells(parser, row, cells)
         cells.map do |cell|
           # Remove consistent indentation at the front of the cell body
-          body = trim_cell_indent(cell)
+          body = self.trim_indent(cell)
           # Parse the body into blocks
           blocks = parser.parse_thin(body)
           
@@ -587,7 +567,7 @@ module Burst
         tl = lines[0]
         if tl =~ TABLE_HEADER_REGEX
           row = Blocks::TableHeader.new()
-          row.cells = row_to_cells(cell_parser, row, current_row)
+          row.cells = current_row # Table header cells are just strings
           table_rows << row
           
           current_row = nil
@@ -620,6 +600,139 @@ module Burst
       table.rows = table_rows
       return table
     end
+    
+    def handle_simple_table(line, indent)
+      # SIMPLE_TABLE_REGEX = /^(\s*)(=+(?:\s+=+)*)/
+      line =~ SIMPLE_TABLE_REGEX
+      table_indent = $1 || indent
+      table_def = $2
+      
+      # "==  ==" -> ["==", "  ", "=="]
+      columns = table_def.rstrip.scan(/(?:=+)|(?:\s+)/)
+      
+      header_line = nil
+      lines = []
+      # Pull off valid lines from input in *lines*
+      while (line = self.peek) && line.start_with?(table_indent)
+        if line =~ SIMPLE_TABLE_REGEX
+          next_line = self.peek_ahead(1)
+          # If there's a following line
+          if !next_line.nil? && !next_line.strip.empty?
+            if lines.length == 1 # And there was a previous line
+              header_line = lines.shift # Make that the header line
+            elsif lines.length == 0
+              self.shift
+              break # Empty table
+            else
+              raise "Too many lines in table header: #{lines.length.to_s}"
+            end
+          # No following line, so end of table
+          else
+            self.shift
+            break
+          end
+        else
+          lines << line.slice(table_indent.length, line.length)
+        end
+        self.shift
+      end#/while
+      
+      # Parses a row-string according to a columns array with
+      # column-and-separator information.
+      def parse_row(columns, row)
+        if row.strip.empty?
+          # If it's an empty row:
+          cols = []
+          # Columns like ["==", "  ", "=="], so an accurate count of content
+          # columns is needed:
+          column_count = (columns.length / 2) + 1
+          column_count.times {|n| cols << "" }
+          return cols
+        end
+        
+        cols = []
+        
+        col = true # Whether it's a column or separator
+        ri  = 0 # Character index in *row*
+        i   = 0 # Array index in *columns*
+        cl  = columns.length
+        columns.each do |column|
+          if col
+            # It's a column
+            if i == (cl - 1)
+              # It's the last column so grab everything
+              cols << row.slice(ri, row.length)
+            else
+              # Otherwise just grab inside that column
+              cols << row.slice(ri, column.length).to_s
+            end
+          else
+            # It's a separator so don't do anything.
+          end
+          i += 1
+          ri += column.length
+          col = !col
+        end
+        return cols
+      end
+      
+      table_rows = []
+      # Parse the raw lines using *parse_row()* and compact them into
+      # row-column arrays in *table_rows*.
+      current_row = nil
+      while !lines.empty?
+        tl = lines[0]
+        if current_row.nil?
+          current_row = parse_row(columns, tl)
+          table_rows << current_row
+        else
+          # There is a current_row
+          row = parse_row(columns, tl)
+          if row[0].strip.empty?
+            # Blank first column so append content of this row to the
+            # current row.
+            ci = 0
+            row.each do |col|
+              current_row[ci] << ("\n"+col)
+              ci += 1
+            end
+          else
+            # First column not blank so make a new row.
+            current_row = row
+            table_rows << current_row
+          end
+        end
+        lines.shift
+      end
+      
+      # Set up a sub-parser to parse table cells
+      cell_parser = self.class.new_subparser(self)
+      
+      table_rows.map! do |row_array|
+        row = Blocks::TableRow.new
+        row.cells = row_array.map do |cell|
+          if cell.strip == "\\"
+            blocks = []
+          else
+            body   = self.trim_indent(cell)
+            blocks = cell_parser.parse_thin(body)
+          end
+          Blocks::TableCell.new(row, blocks)
+        end
+        row#return
+      end
+      # If there is a header row then push it onto the front of the row array.
+      if header_line
+        header_row = Blocks::TableHeader.new
+        header_row.cells = parse_row(columns, header_line)
+        table_rows.unshift header_row
+      end
+      
+      table = Blocks::Table.new
+      table.rows = table_rows
+      return table
+    end
+      
     
     # UTILITIES ---------------------------------------------------------------
     
@@ -722,6 +835,32 @@ module Burst
         end
       end
       return content
+    end
+    
+    # Removes leading indents from a body of text according to indent of the
+    # first line in the body.
+    def trim_indent(body)
+      # TODO: Rewrite for speeeeed...
+      lines = body.split("\n")
+      if lines.empty?
+        return body
+      end
+      
+      first_line = lines[0]
+      # /^(\s+)(.+)$/
+      first_line =~ INDENTED_REGEX
+      first_indent = $1
+      if first_indent
+        return lines.map! {|line|
+          if line.start_with? first_indent
+            line.slice(first_indent.length, line.length)
+          else
+            line
+          end
+        }.join("\n")
+      else
+        body
+      end
     end
     
   end#/Parser3

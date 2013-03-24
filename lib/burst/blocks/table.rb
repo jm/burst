@@ -7,12 +7,14 @@ module Burst
         @blocks = blocks || []
       end
       
+      # TODO: Maybe remove this now that TableHeader does its own thing.
       def opening_tag
         @parent.is_a?(TableHeader) ? '<th>' : '<td>'
       end
       def closing_tag
         @parent.is_a?(TableHeader) ? '</th>' : '</td>'
       end
+      
       def to_html(renderer)
         html = "#{self.opening_tag}\n"
         @blocks.each do |block|
@@ -46,6 +48,14 @@ module Burst
       end
     end
     class TableHeader < TableRow
+      def to_html(renderer)
+        h = "<tr>\n"
+        # NOTE: Cells in TableHeader are just plain text
+        @cells.each do |cell|
+          h << ("<th>" + renderer.render(cell) + "</th>\n")
+        end
+        return (h + "</tr>\n")
+      end
       def inspect
         "th(#{@cells.length.to_s})"
       end
