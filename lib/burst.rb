@@ -20,6 +20,7 @@ require 'burst/blocks/directives/admonition'
 require 'burst/blocks/directives/figure'
 require 'burst/blocks/directives/image'
 require 'burst/blocks/table'
+require 'burst/blocks/line'
 
 module Burst
   VERSION = '0.0.1'

@@ -5,7 +5,9 @@ module Burst
     SECTION_TITLE_REGEX = /^[\!\"\#\$\%\&\'\(\)\*\+\,\-\.\/\;\<\=\>\?\@\[\\\]\^\_\`\{\|\}\~]{1,}$/
     
     TRANSITION_REGEX = /^[\!\"\#\$\%\&\'\(\)\*\+\,\-\.\/\;\<\=\>\?\@\[\\\]\^\_\`\{\|\}\~]{4,}$/
-
+    
+    LINE_BLOCK_REGEX = /^(\s*)(\|\s+)(.+)$/
+    
     BULLET_LIST_REGEX     = /^(\s*)([\*\+\-\•\‣])(\s+)(.+)$/
     ENUMERATED_LIST_REGEX = /^(\s*)(\w+\.|\(?\w+\))(\s+)(.+)$/
 
@@ -14,7 +16,7 @@ module Burst
     LITERAL_BLOCK_START_REGEX = /^\:\:/
     
     LITERAL_BLOCK_REGEX = /^(\s+)(.+)$/
-
+    
     INDENTED_REGEX = /^(\s+)(.+)$/
 
     QUOTE_LITERAL_BLOCK_REGEX = /^\s*\".+/
@@ -121,6 +123,9 @@ module Burst
         
       elsif test_line =~ SIMPLE_TABLE_REGEX
         handle_simple_table(line, indent)
+      
+      elsif test_line =~ LINE_BLOCK_REGEX
+        handle_line_block(line, indent)
       
       elsif test_line =~ BULLET_LIST_REGEX
         handle_bullet_list(line, indent)
@@ -256,6 +261,52 @@ module Burst
       return list
     end
     
+    def handle_line_block(line, indent)
+      # LINE_BLOCK_REGEX = /^(\s*)(\|\s+)(.+)$/
+      line =~ LINE_BLOCK_REGEX
+      
+      content = $3
+      line_indent = $1 || indent
+      line_marker = $2
+      line_blank_marker = line_marker.sub("|", " ")
+      # For lines without proper indentation following the "|":
+      line_simple_marker = "|"
+      
+      lines = [content]
+      
+      lil = line_indent.length
+      lml = line_marker.length
+      
+      line = self.replace_tabs(self.peek)
+      while !line.nil? && line.start_with?(line_indent)
+        # Slice off the indent
+        line = line.slice(lil, line.length)
+        # Check for markers
+        if line.start_with?(line_marker)
+          lines.push line.slice(lml, line.length)
+        elsif line.start_with?(line_blank_marker)
+          if line.strip.empty?
+            # Hit an empty line
+            break
+          end
+          # Continuation, so append it to the previous line
+          lines.last << line.slice(lml, line.length)
+        elsif line.strip == line_simple_marker
+          # Blank line
+          lines.push("")
+        else
+          # Line didn't start with either of the correct markers
+          if line.strip.empty?
+            break
+          else
+            raise "Unrecognized line '#{line.inspect}' in line block"
+          end
+        end
+        line = self.shift
+      end
+      
+      return Blocks::Line.new(lines.join("\n"))
+    end
     
     # Consumes one paragraph block.
     def handle_paragraph(line, indent)
@@ -732,7 +783,6 @@ module Burst
       table.rows = table_rows
       return table
     end
-      
     
     # UTILITIES ---------------------------------------------------------------
     

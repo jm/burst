@@ -1,27 +1,25 @@
 Table
 ----
 
-+------------------------+------------+----------+----------+
-| Header row, column 1   | Header 2   | Header 3 | Header 4 |
-|                        |            |          |          |
-| (header rows optional) |            |          |          |
-+========================+============+==========+==========+
-| body row 1, column 1   | column 2   | column 3 | column 4 |
-+------------------------+------------+----------+----------+
-| body row 2             | ...        | ...      |          |
-+------------------------+------------+----------+----------+
+Take it away, Eric the Orchestra Leader!
 
+    | A one, two, a one two three four
+    |
+    | Half a bee, philosophically,
+    |     must, *ipso facto*, half not be.
+    | But half the bee has got to be,
+    |     *vis a vis* its entity.  D'you see?
+    |
+    | But can a bee be said to be
+    |     or not to be an entire bee,
+    |         when half the bee is not a bee,
+    |             due to some ancient injury?
+    |
+    | Singing...
 
-=====  =====
-col 1  col 2
-=====  =====
-1      Second column of row 1.
-2      Second column of row 2.
-       Second line of paragraph.
-3      - Second column of row 3.
-
-       - Second item in bullet
-         list (row 3, column 2).
-\      Row 4; column 1 will be empty.
-=====  =====
+| Lend us a couple of bob till Thursday.
+| I'm absolutely skint.
+| But I'm expecting a postal order and I can pay you back
+  as soon as it comes.
+| Love, Ewan.
 
