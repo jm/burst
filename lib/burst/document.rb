@@ -1,12 +1,12 @@
 module Burst
   class Document
-    attr_accessor :blocks, :references, :anonymous_hyperlink_references, :footnotes, :rendered
+    attr_accessor :blocks, :references, :anonymous_references, :footnotes, :rendered
 
     def initialize(renderer)
       @blocks = []
-      @anonymous_hyperlink_references = []
       @footnotes = []
 
+      @anonymous_references = []
       @references = {}
 
       @inline_renderer = renderer
@@ -21,7 +21,7 @@ module Burst
       @rendered ||= render
 
       replace_reference_placeholders
-      replace_anonymous_hyperlink_reference_placeholders
+      replace_anonymous_reference_placeholders
 
       @rendered
     end
@@ -32,9 +32,9 @@ module Burst
       end
     end
 
-    def replace_anonymous_hyperlink_reference_placeholders
+    def replace_anonymous_reference_placeholders
       @rendered.gsub!(/\[\[anon-hl\]\]/) do
-        @anonymous_hyperlink_references.shift
+        @anonymous_references.shift
       end
     end
 

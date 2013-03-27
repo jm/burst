@@ -1,4 +1,4 @@
 require './lib/burst'
 
-parser = Burst::Parser.new
+parser = Burst::NewParser.new
 puts parser.render(File.read("./test.rst"))

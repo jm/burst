@@ -9,8 +9,24 @@ module Burst
       end
 
       def to_html(renderer)
-        "<p>'#{renderer.render(text)}' &mdash; #{attribution}"
+        if @attribution
+          "<blockquote>#{renderer.render(text)}<br /><br /><cite>&mdash; #{attribution}</cite></blockquote>"
+        else
+          "<blockquote>#{renderer.render(text)}</blockquote>"
+        end
       end
+      def inspect
+        short = text.slice(0, 10)
+        if text.length > 10
+          short << "..."
+        end
+        out = "q(#{text.length.to_s}:#{short.inspect}"
+        if @attribution
+          out << ",#{@attribution}"
+        end
+        return out + ")"
+      end
+      
     end
   end
 end

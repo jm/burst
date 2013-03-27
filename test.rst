@@ -15,6 +15,8 @@ text editor, documents can be created which
 
 - are easy to read in text editor and
 
+  - deeper
+
 - can be *automatically* converted to
  
   - html and 
@@ -32,8 +34,16 @@ reStructuredText can be used, for example, to
   My own paragraph goes here bro.  Seriously::
 
     YEAH BUDDY
+    
+    SERIOUSLY
   
   What?
+  
+    Quote
+    
+    -- Attribution
+  
+  What2?
 
 - create html webpages without knowing html 
 

@@ -17,6 +17,13 @@ module Burst
       def to_html(renderer)
         "<p>\n#{renderer.render(text)}\n</p>"
       end
+      def inspect
+        short = text.slice(0, 10)
+        if text.length > 10
+          short << "..."
+        end
+        "p(#{text.length.to_s}:#{short.inspect})"
+      end
     end
   end
 end
