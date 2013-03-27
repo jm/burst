@@ -1,5 +1,6 @@
 $:.unshift(File.dirname(__FILE__))
 
+require 'burst/exception'
 require 'burst/parser'
 require 'burst/parser-new'
 require 'burst/document'

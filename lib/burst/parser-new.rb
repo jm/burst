@@ -1,6 +1,7 @@
 module Burst
   class NewParser
-    attr_accessor :current_line, :document, :previous_blank, :inline_renderer
+    attr_accessor :current_line, :document, :previous_blank, :inline_renderer,
+                  :line_number, :parent
     
     SECTION_TITLE_REGEX = /^[\!\"\#\$\%\&\'\(\)\*\+\,\-\.\/\;\<\=\>\?\@\[\\\]\^\_\`\{\|\}\~]{1,}$/
     
@@ -54,10 +55,12 @@ module Burst
       parser = self.new()
       parser.inline_renderer = parent.inline_renderer
       parser.document        = parent.document
+      parser.parent          = parent
       return parser
     end
     
     def parse(content)
+      @line_number = 0
       @lines    = content.split("\n")
       @document = Document.new(@inline_renderer)
       
@@ -70,6 +73,7 @@ module Burst
     
     # Returns just blocks instead of a full document.
     def parse_thin(content)
+      @line_number = (@parent ? @parent.line_number : 0)
       @lines = content.split("\n")
       return parse_body("")
     end
@@ -88,7 +92,7 @@ module Burst
       blocks = []
       
       while !@lines.empty?
-        line = @lines.shift
+        line = self.shift
         line = replace_tabs(line)
         # Skip empty lines
         if line.strip.empty?
@@ -96,7 +100,7 @@ module Burst
         end
         if line.slice(0, indent_length) != indent
           # If the indent doesn't match, then return all blocks.
-          @lines.unshift line
+          self.unshift line
           return blocks
         end
         
@@ -107,7 +111,7 @@ module Burst
           # Explicitly returning false indicates to not include the block in
           # the output (used with hyperlink references and such).
         else
-          raise "No return from block parse"
+          raise self.parse_error("No return from block parse")
         end
       end
       return blocks
@@ -188,7 +192,7 @@ module Burst
       list = Blocks::List.new(:bullet)
       
       # Put the line back onto the queue with the indent
-      @lines.unshift(line)
+      self.unshift(line)
       
       while (line = self.peek) && # Latest line
             line.start_with?(indent) && # Enough indent
@@ -199,8 +203,8 @@ module Burst
         content = line.slice(il + iil, line.length)
         # Take off the raw line and replace it with a line that has
         # "- " turned into "  ".
-        @lines.shift
-        @lines.unshift(indent + body_indent + content)
+        self.shift
+        self.unshift(indent + body_indent + content)
         
         ret = parse_body(indent + body_indent)
         # Push whatever we got into the items
@@ -227,7 +231,7 @@ module Burst
       list = Blocks::List.new(:enumerated)
       
       # Put the line back onto the queue with the indent
-      @lines.unshift(line)
+      self.unshift(line)
       # Looking at the latest raw line and making sure the line starts with
       # the indent we're expecting.
       while (line = self.peek) && # Latest line
@@ -242,8 +246,8 @@ module Burst
         
         # Take off the raw line and replace it with a line that has a plain
         # indent instead of one with the list item stuff.
-        @lines.shift
-        @lines.unshift(indent + body_indent + content)
+        self.shift
+        self.unshift(indent + body_indent + content)
         
         ret = parse_body(lines, indent + body_indent)
         # Push whatever we got into the items
@@ -301,7 +305,7 @@ module Burst
           if line.strip.empty?
             break
           else
-            raise "Unrecognized line '#{line.inspect}' in line block"
+            raise self.parse_error("Unrecognized line '#{line.inspect}' in line block")
           end
         end
         line = self.shift
@@ -326,7 +330,7 @@ module Burst
           # If the indent doesn't match, then return all blocks.
           next false
         end
-        @lines.shift
+        self.shift
         true
       }
       
@@ -336,8 +340,8 @@ module Burst
       
       if content.last.end_with? "::"
         # Push on an indicator for a literal block.
-        @lines.unshift "#{indent}"
-        @lines.unshift "#{indent}::"
+        self.unshift "#{indent}"
+        self.unshift "#{indent}::"
       end
       
       return Blocks::Paragraph.new(content.join "\n")
@@ -349,19 +353,19 @@ module Burst
     
     def handle_wrapped_section_title(line, indent)
       prefix = line
-      header = @lines.shift.slice(indent.length, line.length)
-      suffix = @lines.shift.slice(indent.length, line.length)
+      header = self.shift.slice(indent.length, line.length)
+      suffix = self.shift.slice(indent.length, line.length)
       
       if prefix != suffix
         # TODO: Line numbers
-        raise "Prefix doesn't match suffix"
+        raise self.parse_error("Prefix doesn't match suffix")
       end
       return Blocks::Header.new(header)
     end
     
     def handle_plain_section_title(line, indent)
       header = line
-      suffix = @lines.shift#.strip
+      suffix = self.shift#.strip
       return Blocks::Header.new(header)
     end
     
@@ -420,7 +424,7 @@ module Burst
         if line.strip.empty?
           lines.shift
         else
-          raise "Expected trailing empty line"
+          raise self.parse_error("Expected trailing empty line")
         end
       end
       
@@ -450,7 +454,9 @@ module Burst
         @document.references[name] = target
         return false
       else
-        raise "Don't know how to handle explicit line like: #{test_line.inspect}"
+        raise self.parse_error(
+          "Don't know how to handle explicit line like: #{test_line.inspect}"
+        )
       end
     end
     
@@ -494,7 +500,7 @@ module Burst
           line = line.slice(option_indent.length, line.length)
           if line =~ DIRECTIVE_OPTION_REGEX
             dir.options[$1] = $2
-            @lines.shift
+            self.shift
           else
             break
           end
@@ -588,7 +594,7 @@ module Burst
       #/while
         lines.push(line.slice(table_indent.length, line.length))
         
-        @lines.shift
+        self.shift
         
       end
       
@@ -677,7 +683,9 @@ module Burst
               self.shift
               break # Empty table
             else
-              raise "Too many lines in table header: #{lines.length.to_s}"
+              raise self.parse_error(
+                "Too many lines in table header: #{lines.length.to_s}"
+              )
             end
           # No following line, so end of table
           else
@@ -796,10 +804,12 @@ module Burst
     # Basic manipulation of the line-queue:
     
     def shift
+      @line_number += 1
       line = @lines.shift
       return line.nil? ? nil : self.replace_tabs(line)
     end
     def unshift(line)
+      @line_number -= 1
       @lines.unshift line
     end
     
@@ -820,7 +830,7 @@ module Burst
       chomped = 0
       while !@lines.empty? && self.peek.strip.empty?
         chomped += 1
-        @lines.shift
+        self.shift
       end
       return chomped
     end
@@ -828,7 +838,7 @@ module Burst
     # Consumes all empty lines it can and returns a non-blank line.
     def slurp_empty!
       while line = self.peek
-        @lines.shift
+        self.shift
         if line.strip.empty?
           next
         else
@@ -878,13 +888,13 @@ module Burst
         if maybe.length > 0
           content << (maybe.join "\n")
           # Shift off all the lines that were found.
-          maybe.length.times { @lines.shift }
+          maybe.length.times { self.shift }
         end
         
         line = self.peek
         if !line.nil? && line.start_with?(indent)
           content << line.slice(indent_length, line.length)
-          @lines.shift # Pull off this line
+          self.shift # Pull off this line
         else
           # Incorrect indentation
           break
@@ -917,6 +927,12 @@ module Burst
       else
         body
       end
+    end
+    
+    # Error handling:
+    
+    def parse_error(message)
+      ParseError.new(self, message)
     end
     
   end#/Parser3
