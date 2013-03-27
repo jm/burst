@@ -8,9 +8,11 @@ module Burst
           @blocks = (blocks || [])
         end
         
+        # TODO: Proper rendering
         def to_html(renderer)
           "Footnote: #{@label}"
         end
+        
         def inspect
           "fn(#{@label},#{@blocks.length})"
         end
