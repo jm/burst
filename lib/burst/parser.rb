@@ -470,15 +470,6 @@ module Burst
       type = $1
       arguments = $2
       
-      dir = Blocks::Explicit.new_for_params(type)
-      dir.arguments = arguments
-      
-      first_line = self.peek
-      # If there is nothing after the directive then just return it.
-      if first_line.nil?
-        return dir
-      end
-      
       # Calculates total indentation. Includes *indent*.
       def calculate_indent(line)
         # /^(\s+)(.+)$/
@@ -486,53 +477,82 @@ module Burst
         return $1
       end
       
-      # If it's not empty then it's going to be options.
-      if !first_line.strip.empty?
-        option_indent = calculate_indent(self.peek)
+      if type == "code"
+        while (line = self.peek) && line.strip.empty?
+          self.shift
+        end
+        raise self.parse_error("Unexpected end after code directive") if line.nil?
         
-        line_okay = Proc.new {|l|
-          if l.start_with? option_indent
-            true
-          else
-            false
-          end
-        }
-        # Search for any options
-        while (line = self.peek) && line_okay.call(line)
-          # Chop of the leading indent
-          line = line.slice(option_indent.length, line.length)
-          if line =~ DIRECTIVE_OPTION_REGEX
-            dir.options[$1] = $2
-            self.shift
-          else
-            break
+        total_indent = calculate_indent(line)
+        if total_indent.nil? || !total_indent.start_with?(indent)
+          self.unshift line
+          raise self.parse_error("Content required following code directive")
+        end
+        
+        lines = self.slurp(total_indent)
+        
+        return Burst::Blocks::Directives::Code.new(type, lines.join("\n"))
+        
+      else
+        # Not a code block so parse like normal.
+        dir = Blocks::Explicit.new_for_params(type)
+        dir.arguments = arguments
+      
+        first_line = self.peek
+        # If there is nothing after the directive then just return it.
+        if first_line.nil?
+          return dir
+        end
+        
+        # If it's not empty then it's going to be options.
+        if !first_line.strip.empty?
+          option_indent = calculate_indent(self.peek)
+        
+          line_okay = Proc.new {|l|
+            if l.start_with? option_indent
+              true
+            else
+              false
+            end
+          }
+          # Search for any options
+          while (line = self.peek) && line_okay.call(line)
+            # Chop of the leading indent
+            line = line.slice(option_indent.length, line.length)
+            if line =~ DIRECTIVE_OPTION_REGEX
+              dir.options[$1] = $2
+              self.shift
+            else
+              break
+            end
           end
         end
-      end
       
-      # Eat up blank lines, then look for body content.
-      self.chomp_empty!
-      line = self.peek
-      if line
-        total_indent = calculate_indent(line)
-        # If it was able to find indentation.
-        if total_indent
-          dir.blocks = self.parse_body(total_indent)
-          # TODO: Maybe refactor this to be cleaner and less type-specific
-          #       (instead more type-ducky).
-          if dir.is_a? Blocks::Directives::Admonition
-            if !dir.arguments.strip.empty?
-              if dir.blocks.first.is_a?(Blocks::Paragraph)
-                dir.blocks.first.text.prepend(dir.arguments.strip + "\n")
-              else
-                dir.blocks.unshift Blocks::Paragraph.new(dir.arguments.strip)
-              end
-              dir.arguments = ""
-            end#/if args empty
-          end#/if admonition
+        # Eat up blank lines, then look for body content.
+        self.chomp_empty!
+        line = self.peek
+        if line
+          total_indent = calculate_indent(line)
+          # If it was able to find indentation.
+          if total_indent
+            dir.blocks = self.parse_body(total_indent)
+            # TODO: Maybe refactor this to be cleaner and less type-specific
+            #       (instead more type-ducky).
+            if dir.is_a? Blocks::Directives::Admonition
+              if !dir.arguments.strip.empty?
+                if dir.blocks.first.is_a?(Blocks::Paragraph)
+                  dir.blocks.first.text.prepend(dir.arguments.strip + "\n")
+                else
+                  dir.blocks.unshift Blocks::Paragraph.new(dir.arguments.strip)
+                end
+                dir.arguments = ""
+              end#/if args empty
+            end#/if admonition
         
-        end#/if total_indent
-      end#/if line
+          end#/if total_indent
+        end#/if line
+        
+      end#/if type != "code"
       
       return dir
     end#/handle_directive

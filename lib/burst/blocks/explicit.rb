@@ -7,6 +7,7 @@ module Burst
         "figure" => Burst::Blocks::Directives::Figure,
         "topic" => Burst::Blocks::Directives::Topic,
         "image" => Burst::Blocks::Directives::Image
+        # "code" => Burst::Blocks::Directives::Code
       }
 
       def self.new_for_params(markup_directive, text = "")
