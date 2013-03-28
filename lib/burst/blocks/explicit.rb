@@ -3,12 +3,18 @@ module Burst
     class Explicit
       # Required admonitions per the rST spec
       ADMONITIONS = %w{admonition attention danger caution error hint important note tip warning}
+      DIRECTIVES = {
+        "figure" => Burst::Blocks::Directives::Figure,
+        "topic" => Burst::Blocks::Directives::Topic,
+        "image" => Burst::Blocks::Directives::Image
+      }
 
       def self.new_for_params(markup_directive, text = "")
         if markup_directive == "image"
           Burst::Blocks::Directives::Image.new(text)
-        elsif markup_directive == "figure"
-          Burst::Blocks::Directives::Figure.new(text)
+        elsif DIRECTIVES.has_key? markup_directive
+          DIRECTIVES[markup_directive].new(markup_directive)
+          # Burst::Blocks::Directives::Figure.new(text)
         elsif ADMONITIONS.include?(markup_directive)
           Burst::Blocks::Directives::Admonition.new(markup_directive)
         else

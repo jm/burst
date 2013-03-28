@@ -12,7 +12,7 @@ module Burst
           unless @blocks.empty?
             html << (@blocks.map {|b| b.to_html(renderer) }.join("\n") + "\n")
           end
-          return (html + "</div>")
+          return (html + "</div>\n")
         end
       end
     end

@@ -24,6 +24,7 @@ module Burst
       def inspect
         "h(#{text})"
       end
-    end
-  end
-end
+      
+    end#/Header
+  end#/Blocks
+end#/Burst
