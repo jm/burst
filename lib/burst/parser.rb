@@ -120,7 +120,25 @@ module Burst
     def parse_block(line, indent)
       test_line = line.slice(indent.length, line.length)
       
-      if test_line =~ TABLE_REGEX
+      
+      # Check if wrapped section title or a transition  
+      if test_line =~ SECTION_TITLE_REGEX
+        if self.peek_ahead(0).to_s.strip.empty?
+          handle_transition(line, indent)
+        elsif self.peek_ahead(1).to_s =~ SECTION_TITLE_REGEX
+          beyond = self.peek_ahead(2)
+          if beyond.to_s.strip.empty?
+            handle_wrapped_section_title(line, indent)
+          else
+            handle_table(line, indent)
+          end
+        end
+      
+      # Check if next line is a section title line
+      elsif !line.strip.empty? && self.peek.to_s =~ SECTION_TITLE_REGEX
+        handle_plain_section_title(line, indent)
+      
+      elsif test_line =~ TABLE_REGEX
         handle_table(line, indent)
         
       elsif test_line =~ SIMPLE_TABLE_REGEX
@@ -134,18 +152,6 @@ module Burst
       
       elsif test_line =~ ENUMERATED_LIST_REGEX
         handle_enumerated_list(line, indent)
-      
-      # Check if wrapped section title or a transition  
-      elsif test_line =~ SECTION_TITLE_REGEX
-        if self.peek.to_s.strip.empty?
-          handle_transition(line, indent)
-        else
-          handle_wrapped_section_title(line, indent)
-        end
-      
-      # Check if next line is a section title line
-      elsif !line.strip.empty? && self.peek.to_s =~ SECTION_TITLE_REGEX
-        handle_plain_section_title(line, indent)
       
       elsif test_line =~ LITERAL_BLOCK_START_REGEX
         # Grab the next non-empty line
@@ -352,19 +358,19 @@ module Burst
     def handle_wrapped_section_title(line, indent)
       prefix = line
       header = self.shift.slice(indent.length, line.length)
-      suffix = self.shift.slice(indent.length, line.length)
+      suffix = self.shift.slice(indent.length, line.length).rstrip
       
+      prefix.rstrip!
       if prefix != suffix
-        # TODO: Line numbers
         raise self.parse_error("Prefix doesn't match suffix")
       end
-      return Blocks::Header.new(header)
+      return Blocks::Header.new(header, (prefix.slice(0, 1) * 2).to_sym)
     end
     
     def handle_plain_section_title(line, indent)
       header = line
       suffix = self.shift#.strip
-      return Blocks::Header.new(header)
+      return Blocks::Header.new(header, suffix.slice(0, 1).to_sym)
     end
     
     def handle_block_quote(line, indent)

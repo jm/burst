@@ -1,6 +1,7 @@
 module Burst
   class Document
-    attr_accessor :blocks, :references, :anonymous_references, :footnotes, :rendered
+    attr_accessor :blocks, :references, :anonymous_references, :footnotes,
+                  :rendered
 
     def initialize(renderer)
       @blocks = []

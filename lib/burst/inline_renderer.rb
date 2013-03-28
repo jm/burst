@@ -3,12 +3,16 @@ require 'uri'
 
 module Burst
   class InlineRenderer
-    attr_accessor :content
-
     DEFAULT_FOOTNOTE_SYMBOLS = [
       "asterisk", "dagger", "Dagger", "sect", "para",
       "numbersign", "spades", "hearts", "diams", "clubs"
     ]
+    
+    attr_accessor :content, :header_hierarchy
+    
+    def initialize
+      @header_hierarchy = []
+    end
 
     def next_footnote_number
       @footnote_index ||= 0
