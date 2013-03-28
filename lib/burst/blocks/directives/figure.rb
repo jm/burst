@@ -1,20 +1,18 @@
 module Burst
   module Blocks
     module Directives
-      class Figure < Burst::Blocks::Basic
+      class Figure < Burst::Blocks::Directive
         def initialize(content)
-          @whole_content = content.split("\n")
-
-          @url = @whole_content.shift
-          @caption = @whole_content.join("\n")
+          super("figure")
         end  
 
         def to_html(renderer)
-          "<div class='figure'>
-            <img src='#{@url}'>
-            #{renderer.render(@caption)}
-           </div>
-          "
+          html = "<div class=\"figure\">\n"
+          html << "<img src=\"#{@arguments.strip}\">\n"
+          unless @blocks.empty?
+            html << (@blocks.map {|b| b.to_html(renderer) }.join("\n") + "\n")
+          end
+          return (html + "</div>")
         end
       end
     end
