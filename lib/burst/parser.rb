@@ -125,13 +125,11 @@ module Burst
       if test_line =~ SECTION_TITLE_REGEX
         if self.peek_ahead(0).to_s.strip.empty?
           handle_transition(line, indent)
-        elsif self.peek_ahead(1).to_s =~ SECTION_TITLE_REGEX
-          beyond = self.peek_ahead(2)
-          if beyond.to_s.strip.empty?
-            handle_wrapped_section_title(line, indent)
-          else
-            handle_table(line, indent)
-          end
+        elsif self.peek_ahead(1).to_s =~ SECTION_TITLE_REGEX &&
+              self.peek_ahead(2).to_s.strip.empty?
+          handle_wrapped_section_title(line, indent)
+        else
+          handle_table(line, indent)
         end
       
       # Check if next line is a section title line
@@ -139,6 +137,7 @@ module Burst
         handle_plain_section_title(line, indent)
       
       elsif test_line =~ TABLE_REGEX
+        
         handle_table(line, indent)
         
       elsif test_line =~ SIMPLE_TABLE_REGEX
