@@ -34,19 +34,20 @@ Gem::Specification.new do |s|
   s.require_paths = %w[lib]
 
   ## If your gem includes any executables, list them here.
-  s.executables = ["burst"]
+  # s.executables = ["burst"]
 
   ## Specify any RDoc options here. You'll want to add your README and
   ## LICENSE files to the extra_rdoc_files list.
   s.rdoc_options = ["--charset=UTF-8"]
-  s.extra_rdoc_files = %w[README LICENSE]
+  s.extra_rdoc_files = %w[README.md LICENSE]
 
   ## List your runtime dependencies here. Runtime dependencies are those
   ## that are needed for an end user to actually USE your code.
-  s.add_dependency('state_machine', [">= 1.10"])
+  s.add_dependency("state_machine", ">= 1.2.0")
 
   ## List your development dependencies here. Development dependencies are
   ## those that are only needed during development
+  s.add_development_dependency('minitest')
   # s.add_development_dependency('DEVDEPNAME', [">= 1.1.0", "< 2.0.0"])
 
   ## Leave this section as-is. It will be automatically generated from the
