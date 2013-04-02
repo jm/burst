@@ -9,10 +9,10 @@ class TestParser < MiniTest::Unit::TestCase
   
   def test_wrapped_header
     header = @parser.parse("=\nA\n=").blocks.first
-    assert_kind_of Burst::Blocks::Header, header
+    assert_equal Burst::Blocks::Header.new("A", :"=="), header
   end
   def test_simple_header
     header = @parser.parse("A\n=").blocks.first
-    assert_kind_of Burst::Blocks::Header, header
+    assert_equal Burst::Blocks::Header.new("A", :"="), header
   end
 end

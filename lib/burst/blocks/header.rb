@@ -1,14 +1,14 @@
 module Burst
   module Blocks
     class Header < Basic
-      attr_accessor :text
+      attr_accessor :text, :style
       
       # NOTE: This deviates from the reST spec in naming. Headers are
       #       equivalent to reST section titles.
       
       def initialize(text, style)
         @text = text
-        @style = style
+        @style = style.to_sym
       end
       
       def to_html(renderer)
@@ -22,7 +22,11 @@ module Burst
       end
       
       def inspect
-        "h(#{text})"
+        "h(#{style} #{text})"
+      end
+      
+      def ==(other)
+        self.text == other.text && self.style == other.style
       end
       
     end#/Header
