@@ -10,6 +10,12 @@ module Burst
         @text = text
         @style = style.to_sym
       end
+      def inspect
+        "h(#{style} #{text})"
+      end
+      def ==(other)
+        self.text == other.text && self.style == other.style
+      end
       
       def to_html(renderer)
         idx = renderer.header_hierarchy.index @style
@@ -19,14 +25,6 @@ module Burst
         end
         n = (idx <= 5 ? (idx + 1) : 6).to_s
         "<h#{n}>#{renderer.render(text)}</h#{n}>"
-      end
-      
-      def inspect
-        "h(#{style} #{text})"
-      end
-      
-      def ==(other)
-        self.text == other.text && self.style == other.style
       end
       
     end#/Header
