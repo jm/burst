@@ -6,7 +6,8 @@ module Burst
       DIRECTIVES = {
         "figure" => Burst::Blocks::Directives::Figure,
         "topic" => Burst::Blocks::Directives::Topic,
-        "image" => Burst::Blocks::Directives::Image
+        "image" => Burst::Blocks::Directives::Image,
+        "function" => Burst::Blocks::Directives::Function
         # "code" => Burst::Blocks::Directives::Code
       }
 
