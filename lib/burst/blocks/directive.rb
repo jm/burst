@@ -8,6 +8,7 @@ module Burst
         @arguments = ""
         @options = {}
         @meta = {}
+        @content = ""
       end
       
       def to_html(renderer)

@@ -3,8 +3,8 @@ module Burst
     module Directives
       class Code < Burst::Blocks::Directive
         def initialize(directive, content = nil)
-          @content = content
           super(directive) # directive = "code"
+          @content = content
         end
         
         def to_html(renderer)
