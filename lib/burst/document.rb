@@ -9,7 +9,7 @@ module Burst
 
       @anonymous_references = []
       @references = {}
-
+      
       @inline_renderer = renderer
     end
 
@@ -29,12 +29,12 @@ module Burst
 
     def replace_reference_placeholders
       @references.each do |reference, value|
-        @rendered.gsub!(/\[\[hlr\:#{Digest::SHA1.hexdigest(reference)}\]\]/, value)
+        @rendered.gsub!("[[hlr:#{Digest::SHA1.hexdigest(reference)}]]", value)
       end
     end
 
     def replace_anonymous_reference_placeholders
-      @rendered.gsub!(/\[\[anon-hl\]\]/) do
+      @rendered.gsub!("[[anon-hl]]") do
         @anonymous_references.shift
       end
     end
