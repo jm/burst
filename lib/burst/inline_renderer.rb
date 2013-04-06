@@ -8,10 +8,12 @@ module Burst
       "numbersign", "spades", "hearts", "diams", "clubs"
     ]
     
+    INTERPRETED_TEXT_REGEX = /(?<marker>:(?<role>[\w\-\+\.]+):)?`(?<text>[^`]+)`\g<marker>?/
+    
     attr_accessor :content, :header_hierarchy
     
     def initialize
-      @header_hierarchy = []
+      # pass
     end
 
     def next_footnote_number
@@ -31,17 +33,21 @@ module Burst
     end
 
     def render(content)
+      @header_hierarchy = []
+      @interpreted_texts = {}
+      
       @content = content
 
+      format_interpreted_text
       replace_strong_emphasis 
       replace_emphasis
       replace_inline_literals
       replace_internal_targets
       replace_anonymous_hyperlinks
       replace_hyperlink_references
-      replace_interpreted_text
       replace_footnote_references
       replace_substitution_references
+      replace_interpreted_text
 
       @content
     end
@@ -76,9 +82,49 @@ module Burst
         "<a href='[[hlr:#{Digest::SHA1.hexdigest($1)}]]'>#{$1}</a>#{$2}"
       end
     end
-
+    
+    module Roles
+      class << self
+        def title_reference(key, text)
+          "<cite>[[it:#{key}]]</cite>"
+        end
+        def func_reference(key, text)
+          text = text.strip
+          # TODO: Sanitize text (remove any "s)
+          "<a href=\"#func_#{text}\">#{text}</a>"
+        end
+      end# self
+    end#modules Roles
+    
+    def save_interpreted_text(text)
+      key = Digest::SHA1.hexdigest(text)
+      @interpreted_texts[key] = text
+      return [key, text]
+    end
+    
+    def format_interpreted_text
+      @content.gsub!(INTERPRETED_TEXT_REGEX) do |str|
+        match = $~
+        role = match["role"].to_s
+        key, text = save_interpreted_text(match["text"])
+        if role.empty?
+          # TODO: Do some formatting?
+          Roles.title_reference(key, text)
+        else
+          # Handle role
+          if role == "func"
+            Roles.func_reference(key, text)
+          else
+            raise RenderError.new("Don't know what to do with role: #{role}")
+          end
+        end
+      end
+      # @content.gsub!(/\`(.+?)\`/m, '\1')
+    end
     def replace_interpreted_text
-      @content.gsub!(/\`(.+?)\`/m, '\1')
+      @interpreted_texts.each do |key, value|
+        @content.gsub!("[[it:#{key}]]", value)
+      end
     end
 
     def replace_footnote_references

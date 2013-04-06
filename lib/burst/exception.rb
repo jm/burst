@@ -8,4 +8,6 @@ module Burst
       @message + " (near line #{@parser.line_number.to_s})"
     end
   end
+  class RenderError < StandardError
+  end
 end
