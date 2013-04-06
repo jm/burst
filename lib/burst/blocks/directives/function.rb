@@ -24,11 +24,11 @@ module Burst
           if self.name.empty?
             html << "<dt>\n"
           else
-            html << "<dt id=\"function_#{self.name}\">\n"
+            html << "<dt id=\"func_#{self.name}\">\n"
           end
             html << "<tt>#{self.arguments}</tt>\n"
             unless self.name.empty?
-              html << "<a href=\"#function_#{self.name}\">&para;</a>\n"
+              html << "<a href=\"#func_#{self.name}\">&para;</a>\n"
             end
           html << "</dt>\n"
           
