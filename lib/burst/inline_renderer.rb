@@ -95,6 +95,9 @@ module Burst
           # TODO: Sanitize text (remove any "s)
           "<a href=\"#func_#{text}\">#{text}</a>"
         end
+        def subscript_reference(key, text)
+          "<sub>#{text}</sub>"
+        end
       end# self
     end#modules Roles
     
@@ -116,6 +119,8 @@ module Burst
           # Handle role
           if role == "func"
             Roles.func_reference(key, text)
+          elsif role == "subscript" || role == "sub"
+            Roles.subscript_reference(key, text)
           else
             raise RenderError.new("Don't know what to do with role: #{role}")
           end
