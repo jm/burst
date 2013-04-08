@@ -98,6 +98,9 @@ module Burst
         def subscript_reference(key, text)
           "<sub>#{text}</sub>"
         end
+        def superscript_reference(key, text)
+          "<sup>#{text}</sup>"
+        end
       end# self
     end#modules Roles
     
@@ -121,6 +124,8 @@ module Burst
             Roles.func_reference(key, text)
           elsif role == "subscript" || role == "sub"
             Roles.subscript_reference(key, text)
+          elsif role == "superscript" || role == "sup"
+            Roles.superscript_reference(key, text)
           else
             raise RenderError.new("Don't know what to do with role: #{role}")
           end
