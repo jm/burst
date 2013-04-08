@@ -8,7 +8,7 @@ module Burst
       "numbersign", "spades", "hearts", "diams", "clubs"
     ]
     
-    INTERPRETED_TEXT_REGEX = /(?<marker>:(?<role>[\w\-\+\.]+):)?`(?<text>[^`]+)`\g<marker>?/
+    INTERPRETED_TEXT_REGEX = /(?<marker>:(?<role>[\w\-\+\.]+):)?`(?<text>[^`]+)`\g<marker>?/m
     
     attr_accessor :content, :header_hierarchy
     
@@ -57,7 +57,7 @@ module Burst
     end
 
     def replace_emphasis
-      @content.gsub!(/\*(.+?)\*/m, '<em>\1</em>')
+      @content.gsub!(/\*([^*]+?)\*/m, '<em>\1</em>')
     end
 
     def replace_inline_literals
@@ -65,6 +65,8 @@ module Burst
     end
 
     def replace_internal_targets
+      # TODO: Make this match the spec
+      #       See: http://docutils.sourceforge.net/docs/ref/rst/restructuredtext.html#inline-internal-targets
       @content.gsub!(/\*\*(.+?)\*\*/m, '<strong>\1</strong>')
     end
 
