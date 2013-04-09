@@ -67,7 +67,9 @@ module Burst
     def replace_internal_targets
       # TODO: Make this match the spec
       #       See: http://docutils.sourceforge.net/docs/ref/rst/restructuredtext.html#inline-internal-targets
-      @content.gsub!(/\*\*(.+?)\*\*/m, '<strong>\1</strong>')
+      @content.gsub!(/_`([^`]+)`/m) do |match|
+        "<a href='[[hlr:#{Digest::SHA1.hexdigest($1)}]]'>#{$1}</a>"
+      end
     end
 
     def replace_hyperlink_references
