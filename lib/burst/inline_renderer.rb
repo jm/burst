@@ -8,7 +8,8 @@ module Burst
       "numbersign", "spades", "hearts", "diams", "clubs"
     ]
     
-    INTERPRETED_TEXT_REGEX = /(?<marker>:(?<role>[\w\-\+\.]+):)?`(?<text>[^`]+)`\g<marker>?/m
+    # TODO: Document this regex
+    INTERPRETED_TEXT_REGEX = /(?<!_)(?<marker>:(?<role>[\w\-\+\.]+):)?`(?<text>[^`]+)`\g<marker>?/m
     
     attr_accessor :content, :header_hierarchy
     
