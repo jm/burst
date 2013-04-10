@@ -11,6 +11,10 @@ module Burst
     # TODO: Document this regex
     INTERPRETED_TEXT_REGEX = /(?<!_)(?<marker>:(?<role>[\w\-\+\.]+):)?`(?<text>[^`]+)`\g<marker>?/m
     
+    # TODO: Improve this regex (add escaping)
+    # Based off of the TextMate hyperlink helper bundle regex.
+    HYPERLINK_REGEX = /((https?|s?ftp|ftps|file|smb|afp|nfs|(x-)?man(-page)?|gopher|txmt):\/\/|mailto:)[-:@a-zA-Z0-9_.,~%+\/?=&#;]+(?<![-.,?:#;])/m
+    
     attr_accessor :content, :header_hierarchy
     
     def initialize
@@ -49,6 +53,7 @@ module Burst
       replace_footnote_references
       replace_substitution_references
       replace_interpreted_text
+      replace_standalone_hyperlinks
 
       @content
     end
@@ -167,7 +172,7 @@ module Burst
     end
 
     def replace_substitution_references
-      # We'll post-process these to match references
+      # TODO: Post-process these to match references
       @content.gsub!(/\|(.+)\|/m) do |match| 
         "[[subr:#{Digest::SHA1.hexdigest($1)}]]"
       end
@@ -182,5 +187,24 @@ module Burst
         "<a href='[[anon-hl]]'>#{$1}</a>"
       end
     end
+    
+    def replace_standalone_hyperlinks
+      # TODO: Match email addresses
+      @content.gsub!(HYPERLINK_REGEX) do |match|
+        puts $&.inspect
+        scheme = $2.to_s
+        uri = $&
+        # Don't do anything with internal schemes
+        if scheme == "hlr" || scheme == "subr" || scheme == "it"
+          return match
+        end
+        if scheme == "http" || scheme == "https"
+          "<a href=\"#{uri}\">#{uri}</a>"
+        else
+          raise RenderError.new("Don't know what to do with hyperlink scheme: #{scheme}")
+        end
+      end
+    end#/replace_standalone_hyperlinks
+    
   end
 end
