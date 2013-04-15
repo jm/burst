@@ -2,13 +2,11 @@ PATH
   remote: .
   specs:
     burst (0.0.1)
-      state_machine (>= 1.2.0)
 
 GEM
   remote: https://rubygems.org/
   specs:
     minitest (4.7.0)
-    state_machine (1.2.0)
 
 PLATFORMS
   ruby
