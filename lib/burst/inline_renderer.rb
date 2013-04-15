@@ -1,5 +1,6 @@
 require 'digest/sha1'
 require 'uri'
+require 'erb'
 
 module Burst
   class InlineRenderer
@@ -39,20 +40,26 @@ module Burst
 
     def render(content)
       @header_hierarchy = []
+      
       @interpreted_texts = {}
+      @inline_literals   = {}
       
       @content = content
+      
+      find_inline_literals
       find_interpreted_text
+      
       replace_strong_emphasis 
       replace_emphasis
-      replace_inline_literals
       replace_internal_targets
       replace_anonymous_hyperlinks
       replace_hyperlink_references
       replace_footnote_references
+      
       replace_substitution_references
       replace_interpreted_text
       replace_standalone_hyperlinks
+      replace_inline_literals
 
       @content
     end
@@ -64,11 +71,23 @@ module Burst
     def replace_emphasis
       @content.gsub!(/\*([^*]+?)\*/m, '<em>\1</em>')
     end
-
-    def replace_inline_literals
-      @content.gsub!(/\`\`(.+?)\`\`/m, '<code>\1</code>')
+    
+    def find_inline_literals
+      @content.gsub!(/\`\`(.+)\`\`/m) do |match|
+        literal = $1
+        key     = Digest::SHA1.hexdigest(literal)
+        @inline_literals[key] = literal
+        "[[il:#{key}]]"
+      end
     end
-
+    def replace_inline_literals
+      # @content.gsub!(/\`\`(.+)\`\`/m, '<code>\1</code>')
+      @inline_literals.each do |key, value|
+        @content.gsub!("[[il:#{key}]]", "<code>"+ERB::Util.html_escape(value)+"</code>")
+      end
+    end
+    
+    
     def replace_internal_targets
       @content.gsub!(/_`([^`]+)`/m) do |match|
         "<a href='[[hlr:#{Digest::SHA1.hexdigest($1)}]]'>#{$1}</a>"
