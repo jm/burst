@@ -42,8 +42,7 @@ module Burst
       @interpreted_texts = {}
       
       @content = content
-
-      format_interpreted_text
+      find_interpreted_text
       replace_strong_emphasis 
       replace_emphasis
       replace_inline_literals
@@ -71,8 +70,6 @@ module Burst
     end
 
     def replace_internal_targets
-      # TODO: Make this match the spec
-      #       See: http://docutils.sourceforge.net/docs/ref/rst/restructuredtext.html#inline-internal-targets
       @content.gsub!(/_`([^`]+)`/m) do |match|
         "<a href='[[hlr:#{Digest::SHA1.hexdigest($1)}]]'>#{$1}</a>"
       end
@@ -118,7 +115,7 @@ module Burst
       return [key, text]
     end
     
-    def format_interpreted_text
+    def find_interpreted_text
       @content.gsub!(INTERPRETED_TEXT_REGEX) do |str|
         match = $~
         role = match["role"].to_s
